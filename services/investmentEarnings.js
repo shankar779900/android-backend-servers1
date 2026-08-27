@@ -172,7 +172,10 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
   const purchasedAt = transaction.investmentStartAt ? new Date(transaction.investmentStartAt) : new Date(transaction.createdAt);
   const durationDays = Math.max(parseDurationDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
   const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
-  const totalProfit = Number(transaction.totalProfit ?? details.totalProfit ?? Math.max(Number(transaction.expectedReturn || 0) - Number(transaction.amount || 0), 0));
+  const amount = Number(transaction.amount || 0);
+  const expectedReturn = Number(transaction.expectedReturn || details.expectedReturn || 0);
+  const derivedReturnPercent = Number(transaction.returnPercent ?? details.returnPercent ?? (amount && expectedReturn ? ((expectedReturn - amount) / amount) * 100 : 0));
+  const totalProfit = Number(transaction.totalProfit ?? details.totalProfit ?? (expectedReturn ? Math.max(expectedReturn - amount, 0) : 0));
   const workingDays = Number(transaction.workingDays || details.workingDays || 22);
   const dailyProfit = Number(transaction.dailyProfit ?? details.dailyProfit ?? (workingDays ? totalProfit / workingDays : 0));
 
@@ -180,12 +183,12 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
     id: transaction.investmentPlanId || transaction.id,
     planName: transaction.investmentName || details.planName || 'Investment Plan',
     planType: details.planType || 'equity',
-    amount: Number(transaction.amount || 0),
+    amount,
     amountLabel: details.amountLabel || `₹${Number(transaction.amount || 0).toLocaleString('en-IN')}`,
     returnLabel: details.returnLabel || 'Up to 0%',
-    returnPercent: Number(details.returnPercent || 0),
+    returnPercent: derivedReturnPercent,
     durationLabel: transaction.investmentDuration || details.durationLabel || '30 Days',
-    totalReturn: Number(transaction.expectedReturn || 0),
+    totalReturn: expectedReturn || amount + totalProfit,
     totalProfit,
     dailyProfit,
     premium: Boolean(details.premium),
@@ -551,11 +554,14 @@ async function getPortfolioSummaryForUser({ userId, referenceDate = new Date() }
     orderBy: { creditedAt: 'asc' },
   });
 
+  const isTradingDayToday = await isTradingDay(referenceDate);
+
   return {
     balance: user.balance,
     plans: aggregatedPlans,
     totalInvested: aggregatedPlans.reduce((sum, plan) => sum + plan.amount * (plan.quantity || 1), 0),
     weeklyData: buildWeeklyEarningsSummary(allEarnings, referenceDate),
+    isTradingDay: isTradingDayToday,
   };
 }
 

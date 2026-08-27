@@ -545,8 +545,26 @@ async function verifyOTP(email, otp, purpose = 'signup') {
 }
 
 function parseDurationDays(label) {
-  const match = label?.match(/(\d+)\s*days?/i);
-  return match ? Number(match[1]) : 30;
+  if (!label) return 30;
+  const normalized = String(label).trim().toLowerCase();
+  if (normalized.includes('month')) return 22;
+  const match = normalized.match(/(\d+)\s*days?/i);
+  if (match) return Number(match[1]);
+  const weekMatch = normalized.match(/(\d+)\s*weeks?/i);
+  if (weekMatch) return Number(weekMatch[1]) * 5;
+  return 30;
+}
+
+function determineWorkingDays(durationLabel, planType) {
+  const normalized = String(durationLabel || '').trim().toLowerCase();
+  if (normalized.includes('month')) return 22;
+  const daysMatch = normalized.match(/(\d+)\s*days?/i);
+  if (daysMatch) return Number(daysMatch[1]);
+  const weeksMatch = normalized.match(/(\d+)\s*weeks?/i);
+  if (weeksMatch) return Number(weeksMatch[1]) * 5;
+  if (planType === 'fno' || planType === 'futures' || planType === 'options') return 5;
+  if (planType === 'equity') return 22;
+  return 22;
 }
 
 function buildPortfolioPlan(transaction, todayGain = 0) {
@@ -564,20 +582,23 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
   const purchasedAt = transaction.createdAt instanceof Date ? transaction.createdAt : new Date(transaction.createdAt);
   const durationDays = Math.max(parseDurationDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
   const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
-  const totalProfit = Number(transaction.totalProfit ?? details.totalProfit ?? Math.max(Number(transaction.expectedReturn || 0) - Number(transaction.amount || 0), 0));
-  const workingDays = Number(transaction.workingDays || details.workingDays || 22);
+  const amount = Number(transaction.amount || 0);
+  const expectedReturn = Number(transaction.expectedReturn || details.expectedReturn || 0);
+  const derivedReturnPercent = Number(transaction.returnPercent ?? details.returnPercent ?? (amount && expectedReturn ? ((expectedReturn - amount) / amount) * 100 : 0));
+  const totalProfit = Number(transaction.totalProfit ?? details.totalProfit ?? (expectedReturn ? Math.max(expectedReturn - amount, 0) : 0));
+  const workingDays = Number(transaction.workingDays || details.workingDays || determineWorkingDays(transaction.investmentDuration || details.durationLabel || '30 Days', details.planType || 'equity'));
   const dailyProfit = Number(transaction.dailyProfit ?? details.dailyProfit ?? (workingDays ? totalProfit / workingDays : 0));
 
   return {
     id: transaction.investmentPlanId || transaction.id,
     planName: transaction.investmentName || details.planName || 'Investment Plan',
     planType: details.planType || 'equity',
-    amount: Number(transaction.amount || 0),
+    amount,
     amountLabel: details.amountLabel || `₹${Number(transaction.amount || 0).toLocaleString('en-IN')}`,
     returnLabel: details.returnLabel || 'Up to 0%',
-    returnPercent: Number(details.returnPercent || 0),
+    returnPercent: derivedReturnPercent,
     durationLabel: transaction.investmentDuration || details.durationLabel || '30 Days',
-    totalReturn: Number(transaction.expectedReturn || 0),
+    totalReturn: expectedReturn || amount + totalProfit,
     totalProfit,
     dailyProfit,
     premium: Boolean(details.premium),
@@ -1998,6 +2019,10 @@ app.post('/api/portfolio/purchase', async (req, res) => {
       const durationDays = Math.max(parseDurationDays(durationLabel || '30 Days'), 1);
       const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
+      const workingDays = determineWorkingDays(durationLabel || '30 Days', planType);
+      const totalProfit = Number(totalReturn && Number(totalReturn) > 0 ? Number(totalReturn) - numericAmount : numericAmount * ((Number(returnPercent || 0)) / 100));
+      const dailyProfit = workingDays ? totalProfit / workingDays : 0;
+
       const created = await tx.transaction.create({
         data: {
           id: createId(),
@@ -2009,15 +2034,29 @@ app.post('/api/portfolio/purchase', async (req, res) => {
           user: { connect: { id: session.userId } },
           investmentPlanId: planIdValue,
           investmentName: planName,
-          investmentDuration: durationLabel,
-          expectedReturn: Number(totalReturn || 0),
+          investmentDuration: durationLabel || `${workingDays} Working Days`,
+          investmentDurationDays: workingDays,
+          returnPercent: Number(returnPercent || 0),
+          expectedReturn: Number(totalReturn || numericAmount + totalProfit),
+          totalProfit: Number(totalProfit || 0),
+          dailyProfit: Number(dailyProfit || 0),
+          investmentStartAt: purchasedAt,
+          investmentEndAt: expiresAt,
+          workingDays,
+          creditedEarnings: 0,
+          investmentStatus: 'Active',
           investmentDetails: JSON.stringify({
             planType,
             amountLabel,
             returnLabel,
-            returnPercent,
+            returnPercent: Number(returnPercent || 0),
             premium,
+            durationLabel: durationLabel || `${workingDays} Working Days`,
             expiresAt: expiresAt.toISOString(),
+            workingDays,
+            totalProfit: Number(totalProfit || 0),
+            dailyProfit: Number(dailyProfit || 0),
+            tradingDays: [],
           }),
         },
       });

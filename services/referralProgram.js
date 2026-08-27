@@ -66,6 +66,20 @@ async function awardReferralBonusForReferrer({ prisma, userId, purchaseAmount })
       },
     });
 
+    await tx.transaction.create({
+      data: {
+        id: `${Date.now()}-bonus-${Math.random().toString(16).slice(2, 8)}`,
+        user: { connect: { id: referrer.id } },
+        type: 'bonus',
+        amount: bonus,
+        status: 'completed',
+        description: 'Referral bonus',
+        transactionId: `BONUS-${Date.now()}`,
+        investmentName: 'Referral Bonus',
+        completedAt: new Date(),
+      },
+    });
+
     await tx.user.update({
       where: { id: userId },
       data: { referralBonusPaid: true },
