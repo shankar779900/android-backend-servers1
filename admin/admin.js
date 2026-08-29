@@ -1273,7 +1273,20 @@ async function loadPendingTransactions(search = '') {
 
     const transactions = Array.isArray(data.transactions) ? data.transactions : [];
     const filtered = transactions.filter((tx) => {
-      const haystack = `${tx.user?.username || ''} ${tx.type || ''} ${tx.paymentMethod || ''} ${tx.utrNumber || ''} ${tx.transactionId || ''}`.toLowerCase();
+      const bankAccount = tx.BankAccount || {};
+      const haystack = [
+        tx.user?.username || '',
+        tx.user?.email || '',
+        tx.user?.phoneNumber || '',
+        tx.type || '',
+        tx.paymentMethod || '',
+        tx.utrNumber || '',
+        tx.transactionId || '',
+        bankAccount.accountHolderName || '',
+        bankAccount.accountNumber || '',
+        bankAccount.bankName || '',
+        bankAccount.ifscCode || '',
+      ].join(' ').toLowerCase();
       return !search || haystack.includes(search.toLowerCase());
     });
 
@@ -1318,23 +1331,33 @@ async function loadPendingTransactions(search = '') {
       table.innerHTML = `
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>User</th><th>Amount</th><th>Bank / UPI</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>User</th><th>Amount</th><th>Account details</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              ${subset.map((tx) => `
-                <tr>
-                  <td>${tx.user?.username || tx.userId}</td>
-                  <td>${formatCurrency(tx.amount || 0)}</td>
-                  <td>${tx.paymentMethod || '—'}</td>
-                  <td>${formatDate(tx.createdAt)}</td>
-                  <td><span class="status-pill pending">${tx.status}</span></td>
-                  <td>
-                    <div class="row-actions">
-                      <button class="small-action" data-action="approve" data-id="${tx.transactionId || tx.id}">Approve</button>
-                      <button class="small-action warn" data-action="reject" data-id="${tx.transactionId || tx.id}">Reject</button>
-                    </div>
-                  </td>
-                </tr>
-              `).join('')}
+              ${subset.map((tx) => {
+                const bankAccount = tx.BankAccount || null;
+                const details = tx.paymentMethod === 'upi'
+                  ? (tx.upiId || 'UPI transfer')
+                  : bankAccount
+                    ? `${bankAccount.accountHolderName || '—'}<br>${bankAccount.bankName || 'Bank'}<br>${bankAccount.accountNumber || '—'}<br>${bankAccount.ifscCode || '—'}`
+                    : 'No account details';
+                const userLabel = `${tx.user?.username || tx.userId || 'Unknown'}${tx.user?.email ? `<br><small>${tx.user.email}</small>` : ''}${tx.user?.phoneNumber ? `<br><small>${tx.user.phoneNumber}</small>` : ''}`;
+
+                return `
+                  <tr>
+                    <td>${userLabel}</td>
+                    <td>${formatCurrency(tx.amount || 0)}</td>
+                    <td>${details}</td>
+                    <td>${formatDate(tx.createdAt)}</td>
+                    <td><span class="status-pill pending">${tx.status}</span></td>
+                    <td>
+                      <div class="row-actions">
+                        <button class="small-action" data-action="approve" data-id="${tx.transactionId || tx.id}">Approve</button>
+                        <button class="small-action warn" data-action="reject" data-id="${tx.transactionId || tx.id}">Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
         </div>

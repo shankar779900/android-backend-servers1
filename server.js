@@ -930,7 +930,10 @@ app.get('/api/admin/pending-transactions', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
-      include: { user: true },
+      include: {
+        user: true,
+        BankAccount: true,
+      },
     });
     return res.json({ transactions: pending });
   } catch (err) {
