@@ -1717,6 +1717,16 @@ app.get('/api/portfolio', async (req, res) => {
   }
 
   try {
+    // Ensure any pending daily earnings are processed so the portfolio
+    // returned to the client includes today's credited earnings when
+    // they are eligible. This is safe because the processor uses an
+    // internal lock to avoid concurrent runs.
+    try {
+      await processDailyInvestmentEarnings();
+    } catch (e) {
+      console.warn('[earnings] pre-warm processor failed', e?.message || e);
+    }
+
     const response = await getPortfolioSummaryForUser({ userId: session.userId, referenceDate: new Date() });
     await cacheSetIfNewer(cacheKey, response, CACHE_TTL_SECONDS, Date.now()).catch(() => {});
     return res.json(response);
