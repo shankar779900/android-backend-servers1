@@ -376,7 +376,19 @@ async function processDailyInvestmentEarnings() {
     for (const investment of activeInvestments) {
       try {
         const startAt = investment.investmentStartAt ? toIndiaMidnight(investment.investmentStartAt) : toIndiaMidnight(investment.createdAt);
-        const endAt = investment.investmentEndAt ? toIndiaMidnight(investment.investmentEndAt) : await getTradingEndDateForWorkingDays(startAt, investment.workingDays || 22);
+        // Determine intended working days: prefer explicit fields, fall back to 22 for equity
+        const detailsRaw = investment.investmentDetails || {};
+        let details = detailsRaw;
+        if (typeof detailsRaw === 'string') {
+          try { details = JSON.parse(detailsRaw || '{}'); } catch { details = {}; }
+        }
+        const planType = (details.planType || 'equity');
+        const planTypeLower = String(planType).toLowerCase();
+        const isFno = ['fno', 'futures', 'options'].includes(planTypeLower);
+        const intendedWorkingDays = investment.investmentDurationDays || investment.workingDays || details.workingDays || (isFno ? 5 : 22);
+
+        // For equity plans we must use share-market working days (fixed 22 by business rule)
+        const endAt = await getTradingEndDateForWorkingDays(startAt, intendedWorkingDays);
         const tradingDates = await getTradingDates(startAt, endAt);
         const workingDays = tradingDates.length;
         let investmentDetails = investment.investmentDetails || {};
@@ -392,7 +404,8 @@ async function processDailyInvestmentEarnings() {
           continue;
         }
 
-        const dailyProfit = calculateDailyProfit(totalProfit, workingDays);
+        // Compute dailyProfit using the intended working days (business rule: equity uses 22 trading days)
+        const dailyProfit = calculateDailyProfit(totalProfit, intendedWorkingDays);
         const lastTradingDate = tradingDates[tradingDates.length - 1];
         // Business rules:
         // - Earnings are credited for a trading date only after 16:00 IST on that date.
@@ -426,7 +439,7 @@ async function processDailyInvestmentEarnings() {
         const earningsData = pendingDates.map((date) => {
           const isFinalProfitDate = date.getTime() === lastTradingDate.getTime();
           const amount = isFinalProfitDate
-            ? roundToTwo(totalProfit - dailyProfit * (workingDays - 1))
+            ? roundToTwo(totalProfit - dailyProfit * (intendedWorkingDays - 1))
             : dailyProfit;
 
           return {
@@ -686,22 +699,24 @@ async function finalizeInvestment(investmentId) {
   if (!investment) throw new Error('Investment not found');
 
   const startAt = investment.investmentStartAt ? toIndiaMidnight(investment.investmentStartAt) : toIndiaMidnight(investment.createdAt);
-  const workingDays = investment.investmentDurationDays || investment.workingDays || (investment.investmentDetails && investment.investmentDetails.workingDays) || 22;
-  const endAt = await getTradingEndDateForWorkingDays(startAt, workingDays);
-  const tradingDates = await getTradingDates(startAt, endAt);
-
   const detailsRaw = investment.investmentDetails || {};
   let details = detailsRaw;
   if (typeof detailsRaw === 'string') {
     try { details = JSON.parse(detailsRaw || '{}'); } catch { details = {}; }
   }
+  const planType = details.planType || 'equity';
+  const planTypeLower = String(planType).toLowerCase();
+  const isFno = ['fno', 'futures', 'options'].includes(planTypeLower);
+  const intendedWorkingDays = investment.investmentDurationDays || investment.workingDays || details.workingDays || (isFno ? 5 : 22);
+  const endAt = await getTradingEndDateForWorkingDays(startAt, intendedWorkingDays);
+  const tradingDates = await getTradingDates(startAt, endAt);
 
   const totalProfit = calculateTotalProfit(Number(investment.amount || 0), Number(investment.returnPercent || details.returnPercent || 0));
-  const dailyProfit = calculateDailyProfit(totalProfit, tradingDates.length || workingDays);
+  const dailyProfit = calculateDailyProfit(totalProfit, intendedWorkingDays);
 
   const earningsData = tradingDates.map((date, idx) => {
     const isFinal = idx === tradingDates.length - 1;
-    const amount = isFinal ? roundToTwo(totalProfit - dailyProfit * (tradingDates.length - 1)) : dailyProfit;
+    const amount = isFinal ? roundToTwo(totalProfit - dailyProfit * (intendedWorkingDays - 1)) : dailyProfit;
     return {
       id: crypto.randomBytes(16).toString('hex'),
       investmentId: investment.id,
