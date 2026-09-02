@@ -421,8 +421,10 @@ async function processDailyInvestmentEarnings() {
           const t = date.getTime();
           if (t < todayIndia.getTime()) return true; // past trading dates always eligible
           if (t === todayIndia.getTime()) {
-            // only include today if it's after 16:00 IST AND the purchase was before 14:00 IST
-            return sameDayCreditAllowed && sameDayPurchaseAllowed;
+            // Apply the purchase-time cutoff only on the purchase date. Later trading
+            // dates remain eligible after the daily crediting time.
+            const isPurchaseDate = t === startAt.getTime();
+            return sameDayCreditAllowed && (!isPurchaseDate || sameDayPurchaseAllowed);
           }
           return false; // future dates not eligible
         });
