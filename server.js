@@ -1212,7 +1212,8 @@ app.post('/api/login', async (req, res) => {
     },
   });
 
-  // Fetch fresh DB data for wallet, transactions, bank accounts, and portfolio
+  // Keep login fast by avoiding the expensive portfolio summary during the auth response.
+  // The app can refresh wallet/portfolio in the background after navigation without blocking sign-in.
   try {
     const transactions = await prisma.transaction.findMany({
       where: { userId: user.id },
@@ -1225,22 +1226,24 @@ app.post('/api/login', async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    let portfolio = null;
-    try {
-      portfolio = await getPortfolioSummaryForUser({ userId: user.id, referenceDate: new Date() });
-    } catch (err) {
-      console.warn('[login] portfolio load failed', err?.message || err);
-    }
+    const portfolioPromise = getPortfolioSummaryForUser({ userId: user.id, referenceDate: new Date() })
+      .then((portfolio) => {
+        cacheSetIfNewer(portfolioCacheKey(user.id), portfolio, CACHE_TTL_SECONDS, Date.now()).catch(() => {});
+        return portfolio;
+      })
+      .catch((err) => {
+        console.warn('[login] portfolio warm-up failed', err?.message || err);
+        return null;
+      });
 
-    // Warm caches asynchronously but don't block the response
     Promise.all([
       cacheUserWalletBalance(user).catch(() => {}),
       cacheUserWalletTransactions(user.id, transactions).catch(() => {}),
       cacheUserBankAccounts(user.id, bankAccounts).catch(() => {}),
-      portfolio ? cacheSetIfNewer(portfolioCacheKey(user.id), portfolio, CACHE_TTL_SECONDS, Date.now()).catch(() => {}) : Promise.resolve(),
+      portfolioPromise.catch(() => null),
     ]).catch(() => {});
 
-    return res.json({ user: safeUser, token, wallet: { balance: user.balance, transactions }, bankAccounts, portfolio });
+    return res.json({ user: safeUser, token, wallet: { balance: user.balance, transactions }, bankAccounts, portfolio: null });
   } catch (err) {
     console.warn('[login] warm data load failed', err?.message || err);
     return res.json({ user: safeUser, token });
@@ -1360,7 +1363,8 @@ app.post('/api/2fa/verify', async (req, res) => {
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
   };
 
-  res.json({ user: safeUser, token });
+  // Keep 2FA login equally fast; avoid expensive portfolio precomputation on verification.
+  res.json({ user: safeUser, token, wallet: { balance: user.balance, transactions: [] }, bankAccounts: [], portfolio: null });
 });
 
 app.post('/api/register/send-otp', async (req, res) => {
