@@ -276,6 +276,43 @@ function bankAccountsCacheKey(userId) {
   return `bankAccounts:${userId}`;
 }
 
+function maskBankAccount(account) {
+  const accountNumber = String(account?.accountNumber || '');
+  return {
+    id: account.id,
+    accountHolderName: account.accountHolderName,
+    accountNumber: accountNumber.length > 4 ? `****${accountNumber.slice(-4)}` : '****',
+    ifscCode: account.ifscCode,
+    bankName: account.bankName,
+    branchName: account.branchName,
+    isVerified: account.isVerified,
+    createdAt: account.createdAt,
+  };
+}
+
+function validateBankAccountInput(input) {
+  const holder = String(input?.holder || '').trim();
+  const accountNumber = String(input?.accountNumber || '').trim();
+  const bankName = String(input?.bankName || '').trim();
+  const ifsc = String(input?.ifsc || '').trim().toUpperCase();
+  const branchName = String(input?.branchName || '').trim();
+
+  if (!holder || !accountNumber || !bankName || !ifsc) {
+    return { error: 'Bank account holder, number, bank name, and IFSC are required' };
+  }
+  if (holder.length > 100 || bankName.length > 100 || branchName.length > 100) {
+    return { error: 'Bank account fields are too long' };
+  }
+  if (!/^\d{6,30}$/.test(accountNumber)) {
+    return { error: 'Account number must contain 6 to 30 digits' };
+  }
+  if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+    return { error: 'Enter a valid IFSC code' };
+  }
+
+  return { value: { holder, accountNumber, bankName, ifsc, branchName } };
+}
+
 function portfolioCacheKey(userId) {
   return `portfolio:${userId}`;
 }
@@ -316,7 +353,7 @@ async function cacheUserWalletTransactions(userId, transactions) {
 
 async function cacheUserBankAccounts(userId, accounts) {
   if (!userId || !Array.isArray(accounts)) return;
-  await cacheSetIfNewer(bankAccountsCacheKey(userId), accounts, CACHE_TTL_SECONDS, Date.now()).catch(() => {});
+  await cacheSetIfNewer(bankAccountsCacheKey(userId), accounts.map(maskBankAccount), CACHE_TTL_SECONDS, Date.now()).catch(() => {});
 }
 
 async function cacheUserPortfolio(userId, response) {
@@ -1243,7 +1280,7 @@ app.post('/api/login', async (req, res) => {
       portfolioPromise.catch(() => null),
     ]).catch(() => {});
 
-    return res.json({ user: safeUser, token, wallet: { balance: user.balance, transactions }, bankAccounts, portfolio: null });
+    return res.json({ user: safeUser, token, wallet: { balance: user.balance, transactions }, bankAccounts: bankAccounts.map(maskBankAccount), portfolio: null });
   } catch (err) {
     console.warn('[login] warm data load failed', err?.message || err);
     return res.json({ user: safeUser, token });
@@ -1616,7 +1653,7 @@ app.get('/api/wallet/bank-accounts', async (req, res) => {
 
   const cached = await cacheGet(bankAccountsCacheKey(session.userId));
   if (cached) {
-    return res.json({ bankAccounts: cached });
+    return res.json({ bankAccounts: cached.map(maskBankAccount) });
   }
 
   const accounts = await prisma.bankAccount.findMany({
@@ -1628,7 +1665,7 @@ app.get('/api/wallet/bank-accounts', async (req, res) => {
     console.warn('[cache] bank accounts warm up failed', err?.message || err);
   });
 
-  res.json({ bankAccounts: accounts });
+  res.json({ bankAccounts: accounts.map(maskBankAccount) });
 });
 
 // Public endpoint for clients to read current deposit settings
@@ -1659,9 +1696,13 @@ app.post('/api/wallet/bank-accounts', async (req, res) => {
     return res.status(401).json({ error: 'Missing auth token' });
   }
 
-  const { holder, accountNumber, bankName, ifsc, branchName } = req.body || {};
-  if (!holder || !accountNumber || !bankName || !ifsc) {
-    return res.status(400).json({ error: 'Bank account holder, number, bank name, and IFSC are required' });
+  const validated = validateBankAccountInput(req.body);
+  if (validated.error) return res.status(400).json({ error: validated.error });
+  const { holder, accountNumber, bankName, ifsc, branchName } = validated.value;
+
+  const existing = await prisma.bankAccount.findFirst({ where: { userId: session.userId, accountNumber } });
+  if (existing) {
+    return res.status(409).json({ error: 'This bank account is already saved' });
   }
 
   const newAccount = await prisma.bankAccount.create({
@@ -1681,7 +1722,7 @@ app.post('/api/wallet/bank-accounts', async (req, res) => {
     console.warn('[cache] invalidate bank accounts failed', err?.message || err);
   });
 
-  res.json({ bankAccount: newAccount });
+  res.json({ bankAccount: maskBankAccount(newAccount) });
 });
 
 app.delete('/api/wallet/bank-accounts/:id', async (req, res) => {
@@ -2213,16 +2254,20 @@ app.post('/api/wallet/withdraw', async (req, res) => {
     if (!bankAccount || !bankAccount.accountNumber) {
       return res.status(400).json({ error: 'Bank account details are required for bank withdrawals' });
     }
+    if (!bankAccount.id) {
+      return res.status(400).json({ error: 'Select a saved bank account for withdrawals' });
+    }
   }
 
   // Fast-path: atomically decrement balance and create a pending withdrawal transaction
   // Use updateMany to ensure atomic check-and-decrement, then create transaction in same tx.
   let bankAccountId = null;
   if (paymentMethod === 'bank') {
-    bankAccountId = await findOrCreateBankAccount(session.userId, bankAccount);
-    if (!bankAccountId) {
-      return res.status(400).json({ error: 'Invalid bank account details for withdrawal' });
+    const savedAccount = await prisma.bankAccount.findFirst({ where: { id: String(bankAccount.id), userId: session.userId } });
+    if (!savedAccount) {
+      return res.status(404).json({ error: 'Saved bank account not found' });
     }
+    bankAccountId = savedAccount.id;
   }
 
   try {
