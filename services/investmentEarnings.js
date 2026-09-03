@@ -350,6 +350,40 @@ async function releaseProcessingLock() {
   earningsProcessorRunning = false;
 }
 
+async function refundInvestmentPrincipal(tx, investment) {
+  const principalRefund = roundToTwo(Number(investment.amount || 0));
+  if (principalRefund <= 0) return;
+
+  const existingRefund = await tx.transaction.findFirst({
+    where: {
+      type: 'investment_refund',
+      referenceTxnId: investment.id,
+    },
+  });
+
+  if (existingRefund) return;
+
+  await tx.user.update({
+    where: { id: investment.userId },
+    data: { balance: { increment: principalRefund } },
+  });
+
+  await tx.transaction.create({
+    data: {
+      id: createId(),
+      type: 'investment_refund',
+      amount: principalRefund,
+      status: 'completed',
+      description: `Principal refunded for ${investment.investmentName || 'Investment Plan'}`,
+      transactionId: `REFUND-${investment.id}`,
+      user: { connect: { id: investment.userId } },
+      investmentName: investment.investmentName || 'Investment Plan',
+      referenceTxnId: investment.id,
+      completedAt: new Date(),
+    },
+  });
+}
+
 async function processDailyInvestmentEarnings() {
   const lockAcquired = await acquireProcessingLock(5);
   if (!lockAcquired) {
@@ -471,6 +505,7 @@ async function processDailyInvestmentEarnings() {
           if (totalCredited >= totalProfit) {
             updateData.investmentStatus = 'Completed';
             updateData.completedAt = new Date();
+            await refundInvestmentPrincipal(tx, investment);
           }
 
           await tx.transaction.update({
@@ -742,6 +777,7 @@ async function finalizeInvestment(investmentId) {
     if (totalCredited >= totalProfit) {
       updateData.investmentStatus = 'Completed';
       updateData.completedAt = new Date();
+      await refundInvestmentPrincipal(tx, investment);
     }
 
     await tx.transaction.update({ where: { id: investment.id }, data: updateData });
