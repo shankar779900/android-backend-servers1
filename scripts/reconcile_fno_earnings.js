@@ -2,7 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.local') });
 const { prisma } = require('../prisma');
 
-const targetEmails = ['devasai11980@gmail.com', 'devkuni380@gmail.com'];
+const { getTradingEndDateForWorkingDays, toIndiaMidnight } = require('../services/investmentEarnings');
 
 function createId() {
   return require('crypto').randomBytes(16).toString('hex');
@@ -27,8 +27,7 @@ async function reconcileUser(user) {
     where: {
       userId: user.id,
       type: 'investment',
-      investmentName: { contains: 'Weekly' },
-      investmentStatus: { in: ['Active', 'Reinvested'] },
+      investmentStatus: { not: 'Withdrawn' },
     },
   });
 
@@ -37,8 +36,14 @@ async function reconcileUser(user) {
 
   for (const investment of investments) {
     const details = getPlanDetails(investment);
-    const isFno = ['fno', 'futures', 'options'].includes(String(details.planType || '').toLowerCase());
-    if (!isFno) continue;
+    const planType = String(details.planType || '').toLowerCase();
+    const isFno = ['fno', 'futures', 'options'].includes(planType);
+    const isEquity = planType === 'equity' || /equity/i.test(investment.investmentName || '');
+    if (!isFno && !isEquity) continue;
+
+    const workingDays = investment.investmentDurationDays || investment.workingDays || details.workingDays || (isFno ? 5 : 22);
+    const endAt = await getTradingEndDateForWorkingDays(toIndiaMidnight(investment.investmentStartAt || investment.createdAt), workingDays);
+    if (endAt > new Date()) continue;
 
     const expectedProfit = roundToTwo(Number(investment.amount || 0) * Number(details.returnPercent || investment.returnPercent || 0) / 100);
     const earnings = await prisma.investmentEarning.findMany({ where: { investmentId: investment.id } });
@@ -46,7 +51,7 @@ async function reconcileUser(user) {
     const correction = roundToTwo(expectedProfit - credited);
     if (correction <= 0) continue;
 
-    corrections.push({ investment, correction, expectedProfit, credited });
+    corrections.push({ investment, correction, expectedProfit, credited, workingDays });
     totalCorrection = roundToTwo(totalCorrection + correction);
   }
 
@@ -75,7 +80,7 @@ async function reconcileUser(user) {
         data: {
           creditedEarnings: item.expectedProfit,
           totalProfit: item.expectedProfit,
-          dailyProfit: roundToTwo(item.expectedProfit / 5),
+          dailyProfit: roundToTwo(item.expectedProfit / item.workingDays),
           investmentStatus: 'Completed',
           completedAt: now,
         },
@@ -94,9 +99,9 @@ async function reconcileUser(user) {
         type: 'earning',
         amount: totalCorrection,
         status: 'completed',
-        description: 'F&O earnings reconciliation',
-        transactionId: `FNO-RECON-${user.id}`,
-        investmentName: 'F&O Earnings Reconciliation',
+        description: 'Investment earnings reconciliation',
+        transactionId: `INV-RECON-${user.id}-${now.getTime()}`,
+        investmentName: 'Investment Earnings Reconciliation',
         completedAt: now,
       },
     });
@@ -109,9 +114,11 @@ async function reconcileUser(user) {
 }
 
 (async () => {
-  for (const email of targetEmails) {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) throw new Error(`User not found: ${email}`);
+  const users = await prisma.user.findMany({
+    where: { transactions: { some: { type: 'investment' } } },
+    select: { id: true, email: true },
+  });
+  for (const user of users) {
     await reconcileUser(user);
   }
   await prisma.$disconnect();
