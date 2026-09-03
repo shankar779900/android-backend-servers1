@@ -209,7 +209,7 @@ function buildWeeklyEarningsSummary(earnings, referenceDate = new Date()) {
   const weekEnd = getIndiaWeekEnd(referenceDate);
 
   const allEarnings = Array.isArray(earnings) ? earnings : [];
-  const unclaimed = allEarnings.filter((earning) => String(earning.status || '').toLowerCase() !== 'claimed');
+  const unclaimed = allEarnings.filter((earning) => String(earning.status || '').toLowerCase() === 'unclaimed');
   const totalUnclaimed = roundToTwo(unclaimed.reduce((sum, item) => sum + Number(item.amount || 0), 0));
 
   const lastClaimedAt = allEarnings
