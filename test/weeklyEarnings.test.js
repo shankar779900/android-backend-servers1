@@ -94,6 +94,67 @@ test('getPortfolioSummaryForUser includes isTradingDay and todayGain in the port
   prisma.holiday = originalPrisma.holiday;
 });
 
+test('getPortfolioSummaryForUser keeps a new purchase separate from completed holdings of the same plan', async () => {
+  const originalUser = prisma.user;
+  const originalTransaction = prisma.transaction;
+  const originalEarning = prisma.investmentEarning;
+  const originalHoliday = prisma.holiday;
+  const referenceDate = new Date('2026-08-17T12:00:00+05:30');
+
+  prisma.user = { findUnique: async () => ({ id: 'u1', balance: 2000 }) };
+  prisma.transaction = {
+    findMany: async () => ([
+      {
+        id: 'inv-new', userId: 'u1', type: 'investment', amount: 10000,
+        expectedReturn: 13000, creditedEarnings: 0, investmentStatus: 'Active',
+        investmentPlanId: 'plan-1', investmentName: 'Equity Growth Plan',
+        investmentDuration: '1 Month', investmentStartAt: new Date('2026-08-17T10:00:00+05:30'),
+        createdAt: new Date('2026-08-17T10:00:00+05:30'), workingDays: 22,
+        totalProfit: 3000, transactionId: 'txn-new',
+        investmentDetails: JSON.stringify({ planType: 'equity', returnPercent: 30 }),
+      },
+      {
+        id: 'inv-old', userId: 'u1', type: 'investment', amount: 10000,
+        expectedReturn: 11000, creditedEarnings: 1000, investmentStatus: 'Completed',
+        investmentPlanId: 'plan-1', investmentName: 'Equity Growth Plan',
+        investmentDuration: '1 Month', investmentStartAt: new Date('2026-07-01T10:00:00+05:30'),
+        createdAt: new Date('2026-07-01T10:00:00+05:30'), workingDays: 22,
+        totalProfit: 1000, transactionId: 'txn-old',
+        investmentDetails: JSON.stringify({ planType: 'equity', returnPercent: 10 }),
+      },
+    ]),
+  };
+  prisma.investmentEarning = {
+    groupBy: async ({ where }) => {
+      if (where?.creditedAt) return [{ investmentId: 'inv-new', _sum: { amount: 25 } }];
+      return [
+        { investmentId: 'inv-new', _sum: { amount: 25 } },
+        { investmentId: 'inv-old', _sum: { amount: 1000 } },
+      ];
+    },
+    findMany: async () => [],
+  };
+  prisma.holiday = { findMany: async () => [] };
+
+  try {
+    const summary = await getPortfolioSummaryForUser({ userId: 'u1', referenceDate });
+    const active = summary.plans.find((plan) => plan.investmentStatus === 'Active');
+    const matured = summary.plans.find((plan) => plan.investmentStatus === 'Completed');
+
+    assert.equal(summary.plans.length, 2);
+    assert.equal(active.quantity, 1);
+    assert.equal(active.creditedEarnings, 25);
+    assert.equal(active.todayGain, 25);
+    assert.equal(matured.quantity, 1);
+    assert.equal(matured.creditedEarnings, 1000);
+  } finally {
+    prisma.user = originalUser;
+    prisma.transaction = originalTransaction;
+    prisma.investmentEarning = originalEarning;
+    prisma.holiday = originalHoliday;
+  }
+});
+
 test('purchaseInvestment stores return metadata needed for accurate daily crediting', async () => {
   const { purchaseInvestment } = require('../services/investmentPurchaseService');
   const originalPrisma = require('../prisma').prisma;

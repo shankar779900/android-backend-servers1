@@ -577,7 +577,9 @@ async function getPortfolioSummaryForUser({ userId, referenceDate = new Date() }
   // Aggregate plans by plan id + amount into quantities
   const grouped = {};
   for (const p of plans) {
-    const key = `${p.id}::${p.amount}`;
+    // Keep completed holdings separate from new active purchases of the same plan.
+    // Otherwise the old quantity and earnings leak into the newly purchased holding.
+    const key = `${p.id}::${p.amount}::${String(p.investmentStatus || 'Unknown').toLowerCase()}`;
     if (!grouped[key]) {
       grouped[key] = { ...p, quantity: Number(p.quantity || 1) };
     } else {
