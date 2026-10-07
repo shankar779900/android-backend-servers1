@@ -15,11 +15,13 @@ model User {
   balance            Float         @default(0)
   registrationNumber String?
   website            String        @default("default")
-  referralCode       String?       @unique
-  referredById       String?
-  referralBonusPaid  Boolean       @default(false)
-  referralBonusEarned Float        @default(0)
-  referralCount      Int           @default(0)
+  referralCode             String?       @unique
+  referredById             String?
+  referralBonusPaid        Boolean       @default(false)
+  referralSignupBonusPaid  Boolean       @default(false)
+  referralPurchaseBonusPaid Boolean      @default(false)
+  referralBonusEarned     Float         @default(0)
+  referralCount           Int           @default(0)
   twoFactorEnabled   Boolean       @default(false)
   twoFactorSecret    String?
   createdAt          DateTime      @default(now())

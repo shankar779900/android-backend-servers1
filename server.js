@@ -19,6 +19,7 @@ const { validateOtpSendRequest, shouldAllowExistingUserOtp } = require('./utils/
 const {
   normalizeReferralCode,
   generateReferralCodeForUser,
+  awardReferralSignupBonusForReferrer,
   awardReferralBonusForReferrer,
 } = require('./services/referralProgram');
 const cron = require('node-cron');
@@ -1561,8 +1562,21 @@ app.post('/api/register', async (req, res) => {
 
   await prisma.oTP.deleteMany({ where: { email, purpose: 'signup' } });
 
-  // If we linked a referrer, increment their referral count (best-effort)
+  // If linked to a referrer, pay the signup bonus and increment their referral count.
   if (referrerId) {
+    try {
+      const signupBonusAward = await awardReferralSignupBonusForReferrer({ prisma, userId: user.id });
+      if (signupBonusAward?.awarded) {
+        console.log('[referral] signup bonus awarded', {
+          referrerId,
+          referredUserId: user.id,
+          bonus: signupBonusAward.bonus,
+        });
+      }
+    } catch (err) {
+      console.warn('[referral] failed to award signup bonus', err?.message || err);
+    }
+
     try {
       await prisma.user.update({
         where: { id: referrerId },
@@ -2241,8 +2255,8 @@ app.post('/api/wallet/withdraw', async (req, res) => {
   if (!session) {
     return res.status(401).json({ error: 'Missing auth token' });
   }
-  if (amount === null || amount < 100) {
-    return res.status(400).json({ error: 'Withdrawal amount must be at least 100' });
+  if (amount === null || amount < 500) {
+    return res.status(400).json({ error: 'Withdrawal amount must be at least 500' });
   }
 
   const validPaymentMethods = ['bank', 'upi'];
