@@ -118,6 +118,8 @@ test('getPortfolioSummaryForUser keeps a new purchase separate from completed ho
         expectedReturn: 11000, creditedEarnings: 1000, investmentStatus: 'Completed',
         investmentPlanId: 'plan-1', investmentName: 'Equity Growth Plan',
         investmentDuration: '1 Month', investmentStartAt: new Date('2026-07-01T10:00:00+05:30'),
+        investmentEndAt: new Date('2026-07-31T10:00:00+05:30'),
+        completedAt: new Date('2026-08-01T10:00:00+05:30'),
         createdAt: new Date('2026-07-01T10:00:00+05:30'), workingDays: 22,
         totalProfit: 1000, transactionId: 'txn-old',
         investmentDetails: JSON.stringify({ planType: 'equity', returnPercent: 10 }),
@@ -147,6 +149,8 @@ test('getPortfolioSummaryForUser keeps a new purchase separate from completed ho
     assert.equal(active.todayGain, 25);
     assert.equal(matured.quantity, 1);
     assert.equal(matured.creditedEarnings, 1000);
+    assert.equal(matured.expiresAt, '2026-07-31T04:30:00.000Z');
+    assert.equal(matured.completedAt, '2026-08-01T04:30:00.000Z');
   } finally {
     prisma.user = originalUser;
     prisma.transaction = originalTransaction;

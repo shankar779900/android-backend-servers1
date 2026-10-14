@@ -171,7 +171,12 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
 
   const purchasedAt = transaction.investmentStartAt ? new Date(transaction.investmentStartAt) : new Date(transaction.createdAt);
   const durationDays = Math.max(parseDurationDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
-  const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  const calculatedExpiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  const storedExpiresAt = transaction.investmentEndAt || details.expiresAt;
+  const parsedExpiresAt = storedExpiresAt ? new Date(storedExpiresAt) : null;
+  const expiresAt = parsedExpiresAt && Number.isFinite(parsedExpiresAt.getTime())
+    ? parsedExpiresAt
+    : calculatedExpiresAt;
   const amount = Number(transaction.amount || 0);
   const expectedReturn = Number(transaction.expectedReturn || details.expectedReturn || 0);
   const derivedReturnPercent = Number(transaction.returnPercent ?? details.returnPercent ?? (amount && expectedReturn ? ((expectedReturn - amount) / amount) * 100 : 0));
@@ -195,6 +200,7 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
     quantity: 1,
     purchasedAt: purchasedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
+    completedAt: transaction.completedAt ? new Date(transaction.completedAt).toISOString() : undefined,
     workingDays,
     creditedEarnings: Number(transaction.creditedEarnings || 0),
     todayGain: Number(todayGain || 0),
@@ -595,6 +601,9 @@ async function getPortfolioSummaryForUser({ userId, referenceDate = new Date() }
       }
       if (new Date(p.expiresAt).getTime() > new Date(grouped[key].expiresAt).getTime()) {
         grouped[key].expiresAt = p.expiresAt;
+      }
+      if (p.completedAt && (!grouped[key].completedAt || new Date(p.completedAt).getTime() > new Date(grouped[key].completedAt).getTime())) {
+        grouped[key].completedAt = p.completedAt;
       }
     }
   }
