@@ -13,6 +13,7 @@ let currentUsersData = [];
 let currentAdminId = localStorage.getItem('adminId') || '';
 const REFRESH_INTERVAL = 30000;
 let autoRefreshTimer = null;
+let depositSettingsExpiryTimer = null;
 const PAGE_SIZE = 8;
 
 function apiUrl(path) {
@@ -758,6 +759,10 @@ function renderApp() {
 
 function renderMain(view) {
   stopAutoRefresh();
+  if (view !== 'payment' && depositSettingsExpiryTimer) {
+    clearInterval(depositSettingsExpiryTimer);
+    depositSettingsExpiryTimer = null;
+  }
   currentView = view;
   clearAlert();
   updateNavActive();
@@ -1534,6 +1539,11 @@ function showWalletForm(user) {
 }
 
 async function renderPayment() {
+  if (depositSettingsExpiryTimer) {
+    clearInterval(depositSettingsExpiryTimer);
+    depositSettingsExpiryTimer = null;
+  }
+
   const main = document.getElementById('main-area');
   main.innerHTML = `
     <div class="page-shell">
@@ -1544,6 +1554,7 @@ async function renderPayment() {
         </div>
       </section>
       <section class="panel-card">
+        <div class="alert ok" id="payment-expiry-status">Payment details are automatically removed 20 minutes after they are saved.</div>
         <div id="settings-form"></div>
       </section>
     </div>
@@ -1554,6 +1565,26 @@ async function renderPayment() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed');
     const settings = data.settings || {};
+    const expiryStatus = document.getElementById('payment-expiry-status');
+    if (settings.expiresAt) {
+      const expiresAt = new Date(settings.expiresAt).getTime();
+      const updateCountdown = () => {
+        const remainingMs = Math.max(0, expiresAt - Date.now());
+        const totalSeconds = Math.ceil(remainingMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        expiryStatus.textContent = `These payment details will be automatically removed in ${minutes}:${seconds}. Saving updates starts a fresh 20-minute timer.`;
+        if (remainingMs <= 0) {
+          clearInterval(depositSettingsExpiryTimer);
+          depositSettingsExpiryTimer = null;
+          renderPayment();
+        }
+      };
+      updateCountdown();
+      depositSettingsExpiryTimer = setInterval(updateCountdown, 1000);
+    } else {
+      expiryStatus.textContent = 'No active payment details. Newly saved details will be removed automatically after 20 minutes.';
+    }
     const form = document.getElementById('settings-form');
     form.innerHTML = `
       <form id="deposit-settings-form">
@@ -1635,6 +1666,7 @@ async function renderPayment() {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Failed to save settings');
         createToast('Payment settings updated successfully.', 'success');
+        renderPayment();
       } catch (error) {
         showAlert(error.message || 'Save failed');
       }

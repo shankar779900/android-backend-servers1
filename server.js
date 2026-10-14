@@ -15,6 +15,11 @@ const IORedis = require('ioredis');
 const { authenticator } = require('otplib');
 const { getPortfolioSummaryForUser, claimPendingWeekEarnings, processDailyInvestmentEarnings } = require('./services/investmentEarnings');
 const { buildPendingDepositTransactionData } = require('./services/depositVerification');
+const {
+  getDepositSettingsExpiresAt,
+  getDepositSettingsExpiryFields,
+  isDepositSettingsExpired,
+} = require('./services/depositSettingsExpiry');
 const { validateOtpSendRequest, shouldAllowExistingUserOtp } = require('./utils/otpFlow');
 const {
   normalizeReferralCode,
@@ -119,6 +124,19 @@ try {
   console.log('[cron] scheduled daily earnings processor at 16:05 IST');
 } catch (e) {
   console.warn('[cron] failed to schedule daily earnings processor', e?.message || e);
+}
+
+try {
+  cron.schedule('* * * * *', async () => {
+    try {
+      await sweepExpiredDepositSettings();
+    } catch (e) {
+      console.error('[cron] deposit settings expiry sweep failed', e?.stack || e);
+    }
+  });
+  console.log('[cron] scheduled deposit settings expiry sweep every minute');
+} catch (e) {
+  console.warn('[cron] failed to schedule deposit settings expiry sweep', e?.message || e);
 }
 
 async function cacheGet(key) {
@@ -423,6 +441,46 @@ try {
   console.warn('[uploads] could not ensure uploads directory', e?.message || e);
 }
 app.use('/uploads', express.static(uploadsDir));
+
+async function clearDepositSettings(setting) {
+  await prisma.depositSetting.update({
+    where: { id: setting.id },
+    data: getDepositSettingsExpiryFields(),
+  });
+
+  if (setting.qrCodePath && setting.qrCodePath.startsWith('/uploads/')) {
+    const qrFilePath = path.join(uploadsDir, path.basename(setting.qrCodePath));
+    await fs.promises.unlink(qrFilePath).catch((err) => {
+      if (err?.code !== 'ENOENT') {
+        console.warn('[deposit-settings] could not remove expired QR code', err?.message || err);
+      }
+    });
+  }
+}
+
+async function getActiveDepositSettings() {
+  const settings = await prisma.depositSetting.findFirst({ orderBy: { createdAt: 'desc' } });
+  if (!settings) return null;
+
+  if (isDepositSettingsExpired(settings)) {
+    await clearDepositSettings(settings);
+    return null;
+  }
+
+  return {
+    ...settings,
+    expiresAt: getDepositSettingsExpiresAt(settings.updatedAt),
+  };
+}
+
+async function sweepExpiredDepositSettings() {
+  const settingsList = await prisma.depositSetting.findMany();
+  for (const settings of settingsList) {
+    if (isDepositSettingsExpired(settings)) {
+      await clearDepositSettings(settings);
+    }
+  }
+}
 
 // Multer config for handling admin file uploads (QR code)
 const storage = multer.diskStorage({
@@ -1033,7 +1091,7 @@ app.get('/api/admin/deposit-settings', async (req, res) => {
   if (!admin) return res.status(401).json({ error: 'Invalid admin' });
 
   try {
-    const settings = await prisma.depositSetting.findFirst({ orderBy: { createdAt: 'desc' } });
+    const settings = await getActiveDepositSettings();
     return res.json({ settings });
   } catch (err) {
     console.error('[admin/deposit-settings] error', err?.message || err);
@@ -1685,7 +1743,7 @@ app.get('/api/wallet/bank-accounts', async (req, res) => {
 // Public endpoint for clients to read current deposit settings
 app.get('/api/wallet/deposit-settings', async (req, res) => {
   try {
-    const settings = await prisma.depositSetting.findFirst({ orderBy: { createdAt: 'desc' } });
+    const settings = await getActiveDepositSettings();
     const result = settings ? { ...settings } : {};
     if (settings && settings.qrCodePath) {
       // make an absolute URL for clients
