@@ -622,7 +622,7 @@ async function sendEmailOTP(email, purpose = 'signup') {
       console.error(`[${purpose}-otp] Could not remove OTP after mail failure:`, cleanupError?.message || cleanupError);
     });
     console.error(`[${purpose}-otp] Failed to send OTP email:`, error?.message || error);
-    throw new Error('SMTP delivery failed. Check the configured mail provider settings.');
+    throw new Error('SMTP delivery failed. Check the configured mail provider settings.', { cause: error });
   } finally {
     clearTimeout(smtpTimeout);
   }
@@ -1506,7 +1506,13 @@ app.post('/api/register/send-otp', async (req, res) => {
   try {
     await sendEmailOTP(email, normalizedPurpose);
   } catch (error) {
-    console.error(`[${normalizedPurpose}-otp] Failed to send email`, error);
+    const smtpError = error?.cause || error;
+    console.error(`[${normalizedPurpose}-otp] Failed to send email`, {
+      code: smtpError?.code || null,
+      responseCode: smtpError?.responseCode || null,
+      command: smtpError?.command || null,
+      message: smtpError?.message || 'Unknown SMTP error',
+    });
     return res.status(500).json({
       error: normalizedPurpose === 'password_reset'
         ? 'Unable to send password reset email right now.'
