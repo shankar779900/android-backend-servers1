@@ -574,6 +574,9 @@ async function sendEmailOTP(email, purpose = 'signup') {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT || 465),
     secure: String(process.env.SMTP_SECURE || 'true').toLowerCase() === 'true',
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 6000,
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASS,
@@ -602,16 +605,25 @@ async function sendEmailOTP(email, purpose = 'signup') {
     `,
   };
 
+  let smtpTimeout;
   try {
-    await transporter.sendMail(mailOptions);
+    await Promise.race([
+      transporter.sendMail(mailOptions),
+      new Promise((_, reject) => {
+        smtpTimeout = setTimeout(() => reject(new Error('SMTP send timed out')), 6000);
+      }),
+    ]);
     console.log(`[${purpose}-otp] Email sent successfully.`);
     return otp;
   } catch (error) {
+    transporter.close();
     await prisma.oTP.deleteMany({ where: { email, purpose } }).catch((cleanupError) => {
       console.error(`[${purpose}-otp] Could not remove OTP after mail failure:`, cleanupError?.message || cleanupError);
     });
     console.error(`[${purpose}-otp] Failed to send OTP email:`, error?.message || error);
     throw new Error('SMTP delivery failed. Check the configured mail provider settings.');
+  } finally {
+    clearTimeout(smtpTimeout);
   }
 }
 
