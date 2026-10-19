@@ -418,7 +418,7 @@ const app = express();
 const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
-const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'Upward Investments').trim();
+const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_DELAY_SECONDS = 60;
@@ -572,7 +572,7 @@ async function sendEmailOTP(email, purpose = 'signup') {
     subject: isPasswordReset ? 'Your password reset code' : 'Your signup verification code',
     htmlContent: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #7c3aed;">Upward Investments</h2>
+        <h2 style="color: #7c3aed;">GrowUP Investments</h2>
         <p>Hello,</p>
         <p>Your ${messagePurpose} code is:</p>
         <div style="background-color: #f3f4f6; padding: 20px; text-align: center; margin: 20px 0;">
@@ -581,7 +581,7 @@ async function sendEmailOTP(email, purpose = 'signup') {
         <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
         <p>If you did not request this code, please ignore this email.</p>
         <br />
-        <p>Best regards,<br />Upward Investments Team</p>
+        <p>Best regards,<br />GrowUP Investments Team</p>
       </div>
     `,
   };

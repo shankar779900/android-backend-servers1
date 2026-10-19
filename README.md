@@ -38,7 +38,7 @@ Steps:
    - `DATABASE_URL`
    - `BREVO_API_KEY` (Brevo API v3 key; keep it secret)
    - `EMAIL_FROM`
-   - `EMAIL_FROM_NAME` (optional; defaults to `Upward Investments`)
+   - `EMAIL_FROM_NAME` (optional; defaults to `GrowUP Investments`)
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `ADMIN_CREATION_KEY` (optional)
