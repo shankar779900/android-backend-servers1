@@ -21,6 +21,7 @@ const {
   isDepositSettingsExpired,
 } = require('./services/depositSettingsExpiry');
 const { validateOtpSendRequest, shouldAllowExistingUserOtp } = require('./utils/otpFlow');
+const { getAllowedPlanAmounts } = require('./utils/investmentPlanAvailability');
 const {
   normalizeReferralCode,
   generateReferralCodeForUser,
@@ -1964,17 +1965,7 @@ app.post('/api/portfolio/purchase', async (req, res) => {
     return res.status(400).json({ error: 'Plan amount is required' });
   }
 
-  let allowedAmountsForType = [];
-  if (planType === 'fno' || planType === 'futures' || planType === 'options') {
-    allowedAmountsForType = [10000, 30000, 50000];
-  } else if (planType === 'commodities') {
-    allowedAmountsForType = [10000, 15000, 25000];
-  } else if (planType === 'equity') {
-    allowedAmountsForType = [5000, 10000, 20000, 30000, 40000, 50000, 100000, 150000, 200000, 250000, 300000];
-  } else {
-    // Fallback to the safest small set
-    allowedAmountsForType = [10000, 30000, 50000];
-  }
+  const allowedAmountsForType = getAllowedPlanAmounts(planType);
 
   if (!allowedAmountsForType.includes(numericAmount)) {
     return res.status(400).json({ error: 'This plan is not available', supportedAmounts: allowedAmountsForType });
