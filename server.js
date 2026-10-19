@@ -562,13 +562,13 @@ async function createOtpRecord(email, purpose = 'signup') {
 }
 
 async function sendEmailOTP(email, purpose = 'signup') {
-  const otp = await createOtpRecord(email, purpose);
   const emailConfigured = Boolean(EMAIL_USER && EMAIL_PASS);
 
   if (!emailConfigured) {
-    console.log(`[signup-otp] Email sender is not configured. OTP for ${email}: ${otp}`);
     throw new Error('Email sender is not configured. Set EMAIL_USER and EMAIL_PASS to send OTP via admin mail.');
   }
+
+  const otp = await createOtpRecord(email, purpose);
 
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -580,15 +580,17 @@ async function sendEmailOTP(email, purpose = 'signup') {
     },
   });
 
+  const isPasswordReset = purpose === 'password_reset';
+  const messagePurpose = isPasswordReset ? 'password reset' : 'signup verification';
   const mailOptions = {
     from: EMAIL_FROM,
     to: email,
-    subject: 'Your signup verification code',
+    subject: isPasswordReset ? 'Your password reset code' : 'Your signup verification code',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #7c3aed;">Upward Investments</h2>
         <p>Hello,</p>
-        <p>Your signup verification code is:</p>
+        <p>Your ${messagePurpose} code is:</p>
         <div style="background-color: #f3f4f6; padding: 20px; text-align: center; margin: 20px 0;">
           <span style="font-size: 28px; font-weight: bold; color: #7c3aed; letter-spacing: 4px;">${otp}</span>
         </div>
@@ -602,12 +604,14 @@ async function sendEmailOTP(email, purpose = 'signup') {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`✅ OTP email sent to ${email}`);
+    console.log(`[${purpose}-otp] Email sent successfully.`);
     return otp;
   } catch (error) {
-    console.error('[signup-otp] Failed to send OTP email:', error);
-    console.log(`[signup-otp] Falling back to logged OTP for ${email}: ${otp}`);
-    return otp;
+    await prisma.oTP.deleteMany({ where: { email, purpose } }).catch((cleanupError) => {
+      console.error(`[${purpose}-otp] Could not remove OTP after mail failure:`, cleanupError?.message || cleanupError);
+    });
+    console.error(`[${purpose}-otp] Failed to send OTP email:`, error?.message || error);
+    throw new Error('SMTP delivery failed. Check the configured mail provider settings.');
   }
 }
 
