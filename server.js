@@ -10,7 +10,6 @@ const fs = require('fs');
 const multer = require('multer');
 const { prisma } = require('./prisma');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
 const axios = require('axios');
 const IORedis = require('ioredis');
 const { authenticator } = require('otplib');
@@ -417,15 +416,9 @@ async function findOrCreateBankAccount(userId, bankAccount) {
 
 const app = express();
 const port = process.env.PORT || 4000;
-const rawEmailUser = (process.env.EMAIL_USER || process.env.SMTP_USER || process.env.ADMIN_EMAIL || '').trim();
-const rawEmailPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.APP_PASSWORD || '').replace(/\s+/g, '').trim();
-const EMAIL_USER = rawEmailUser;
-const EMAIL_PASS = rawEmailPass;
-const EMAIL_FROM = (process.env.EMAIL_FROM || EMAIL_USER).trim();
-
-if (process.env.EMAIL_PASS && rawEmailPass !== process.env.EMAIL_PASS) {
-  console.warn('EMAIL_PASS contained whitespace and was normalized for SMTP auth.');
-}
+const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
+const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
+const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'Upward Investments').trim();
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_DELAY_SECONDS = 60;
@@ -563,34 +556,21 @@ async function createOtpRecord(email, purpose = 'signup') {
 }
 
 async function sendEmailOTP(email, purpose = 'signup') {
-  const emailConfigured = Boolean(EMAIL_USER && EMAIL_PASS);
+  const emailConfigured = Boolean(BREVO_API_KEY && EMAIL_FROM);
 
   if (!emailConfigured) {
-    throw new Error('Email sender is not configured. Set EMAIL_USER and EMAIL_PASS to send OTP via admin mail.');
+    throw new Error('Email sender is not configured. Set BREVO_API_KEY and EMAIL_FROM.');
   }
 
   const otp = await createOtpRecord(email, purpose);
 
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: String(process.env.SMTP_SECURE || 'true').toLowerCase() === 'true',
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 6000,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS,
-    },
-  });
-
   const isPasswordReset = purpose === 'password_reset';
   const messagePurpose = isPasswordReset ? 'password reset' : 'signup verification';
-  const mailOptions = {
-    from: EMAIL_FROM,
-    to: email,
+  const payload = {
+    sender: { name: EMAIL_FROM_NAME, email: EMAIL_FROM },
+    to: [{ email }],
     subject: isPasswordReset ? 'Your password reset code' : 'Your signup verification code',
-    html: `
+    htmlContent: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #7c3aed;">Upward Investments</h2>
         <p>Hello,</p>
@@ -606,25 +586,34 @@ async function sendEmailOTP(email, purpose = 'signup') {
     `,
   };
 
-  let smtpTimeout;
   try {
-    await Promise.race([
-      transporter.sendMail(mailOptions),
-      new Promise((_, reject) => {
-        smtpTimeout = setTimeout(() => reject(new Error('SMTP send timed out')), 6000);
-      }),
-    ]);
-    console.log(`[${purpose}-otp] Email sent successfully.`);
+    const response = await axios.post('https://api.brevo.com/v3/smtp/email', payload, {
+      headers: {
+        'api-key': BREVO_API_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      timeout: 10000,
+    });
+    console.log(`[${purpose}-otp] Email accepted by Brevo.`, {
+      messageId: response.data?.messageId || null,
+    });
     return otp;
   } catch (error) {
-    transporter.close();
     await prisma.oTP.deleteMany({ where: { email, purpose } }).catch((cleanupError) => {
       console.error(`[${purpose}-otp] Could not remove OTP after mail failure:`, cleanupError?.message || cleanupError);
     });
-    console.error(`[${purpose}-otp] Failed to send OTP email:`, error?.message || error);
-    throw new Error('SMTP delivery failed. Check the configured mail provider settings.', { cause: error });
-  } finally {
-    clearTimeout(smtpTimeout);
+    const brevoError = new Error(error?.response?.data?.message || error?.message || 'Brevo email API request failed');
+    brevoError.code = error?.code || null;
+    brevoError.responseCode = error?.response?.status || null;
+    brevoError.command = 'POST https://api.brevo.com/v3/smtp/email';
+    console.error(`[${purpose}-otp] Brevo API send failed:`, {
+      code: brevoError.code,
+      responseCode: brevoError.responseCode,
+      command: brevoError.command,
+      message: brevoError.message,
+    });
+    throw new Error('Brevo email delivery failed. Check the Brevo API key and verified sender.', { cause: brevoError });
   }
 }
 

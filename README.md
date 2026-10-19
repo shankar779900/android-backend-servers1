@@ -36,14 +36,9 @@ Steps:
    - Start Command: `npm start`
 4. Add the required environment variables in Render:
    - `DATABASE_URL`
-   - `SMTP_HOST`
-   - `SMTP_PORT`
-   - `SMTP_SECURE`
-   - `SMTP_USER`
-   - `SMTP_PASS`
-   - `EMAIL_USER`
-   - `EMAIL_PASS`
+   - `BREVO_API_KEY` (Brevo API v3 key; keep it secret)
    - `EMAIL_FROM`
+   - `EMAIL_FROM_NAME` (optional; defaults to `Upward Investments`)
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `ADMIN_CREATION_KEY` (optional)
@@ -52,6 +47,8 @@ Steps:
    - `UPSTASH_REDIS_REST_TOKEN` (optional)
 
 If you want Render to run the backend from the `backend` folder, the `render.yaml` file already points to that folder.
+
+OTP emails use Brevo's HTTPS API at `https://api.brevo.com/v3/smtp/email`, so SMTP host, port, and password variables are not used. Verify the sender address in Brevo before deploying.
 
 ## Auto-push backend changes to GitHub
 
