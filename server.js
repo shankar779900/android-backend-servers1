@@ -1,4 +1,5 @@
 const path = require('path');
+process.env.TZ = 'Etc/UTC';
 const dotenvPath = path.resolve(__dirname, '.env.local');
 require('dotenv').config({ path: dotenvPath });
 const express = require('express');
