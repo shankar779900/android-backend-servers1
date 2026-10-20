@@ -416,6 +416,8 @@ async function findOrCreateBankAccount(userId, bankAccount) {
 }
 
 const app = express();
+// Honor the HTTPS protocol forwarded by the production reverse proxy (for uploaded image URLs).
+app.set('trust proxy', 1);
 const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
@@ -1212,7 +1214,7 @@ app.post('/api/admin/deposit-settings', upload.single('qrFile'), async (req, res
   if (!admin) return res.status(401).json({ error: 'Invalid admin' });
 
     try {
-      const { upiId, bankAccountHolder, bankAccountNumber, bankIfsc, bankName, bankBranch, instructions } = req.body || {};
+      const { upiId, upiAccountHolder, bankAccountHolder, bankAccountNumber, bankIfsc, bankName, bankBranch, instructions } = req.body || {};
       // If a QR file was uploaded via multer, set the public path
       let qrCodePath = null;
       if (req.file && req.file.filename) {
@@ -1221,10 +1223,10 @@ app.post('/api/admin/deposit-settings', upload.single('qrFile'), async (req, res
 
       const existing = await prisma.depositSetting.findFirst();
       if (existing) {
-        const updated = await prisma.depositSetting.update({ where: { id: existing.id }, data: { upiId: upiId || null, bankAccountHolder: bankAccountHolder || null, bankAccountNumber: bankAccountNumber || null, bankIfsc: bankIfsc || null, bankName: bankName || null, bankBranch: bankBranch || null, instructions: instructions || null, qrCodePath: qrCodePath || existing.qrCodePath || null, updatedAt: new Date() } });
+        const updated = await prisma.depositSetting.update({ where: { id: existing.id }, data: { upiId: upiId || null, upiAccountHolder: upiAccountHolder || null, bankAccountHolder: bankAccountHolder || null, bankAccountNumber: bankAccountNumber || null, bankIfsc: bankIfsc || null, bankName: bankName || null, bankBranch: bankBranch || null, instructions: instructions || null, qrCodePath: qrCodePath || existing.qrCodePath || null, updatedAt: new Date() } });
         return res.json({ settings: updated });
       }
-      const created = await prisma.depositSetting.create({ data: { id: createId(), key: 'default', upiId: upiId || null, bankAccountHolder: bankAccountHolder || null, bankAccountNumber: bankAccountNumber || null, bankIfsc: bankIfsc || null, bankName: bankName || null, bankBranch: bankBranch || null, instructions: instructions || null, qrCodePath: qrCodePath || null, updatedAt: new Date() } });
+      const created = await prisma.depositSetting.create({ data: { id: createId(), key: 'default', upiId: upiId || null, upiAccountHolder: upiAccountHolder || null, bankAccountHolder: bankAccountHolder || null, bankAccountNumber: bankAccountNumber || null, bankIfsc: bankIfsc || null, bankName: bankName || null, bankBranch: bankBranch || null, instructions: instructions || null, qrCodePath: qrCodePath || null, updatedAt: new Date() } });
       return res.json({ settings: created });
     } catch (err) {
       console.error('[admin/deposit-settings POST] error', err?.message || err);

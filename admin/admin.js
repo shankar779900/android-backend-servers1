@@ -1648,6 +1648,7 @@ async function renderPayment() {
               </div>
             </div>
             <div class="input-group"><label>UPI ID</label><input id="s-upi" value="${settings.upiId || ''}" /></div>
+            <div class="input-group"><label>UPI account holder name</label><input id="s-upi-holder" value="${settings.upiAccountHolder || ''}" /></div>
             <div class="input-group"><label>Deposit instructions</label><textarea id="s-instructions">${settings.instructions || ''}</textarea></div>
             <div class="input-group">
               <label>QR Code</label>
@@ -1690,6 +1691,7 @@ async function renderPayment() {
       try {
         const formData = new FormData();
         formData.append('upiId', document.getElementById('s-upi').value || '');
+        formData.append('upiAccountHolder', document.getElementById('s-upi-holder').value || '');
         formData.append('bankAccountHolder', document.getElementById('s-holder').value || '');
         formData.append('bankAccountNumber', document.getElementById('s-account').value || '');
         formData.append('bankName', document.getElementById('s-bank').value || '');

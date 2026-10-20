@@ -15,6 +15,7 @@ function isDepositSettingsExpired(settings, now = Date.now()) {
 function getDepositSettingsExpiryFields() {
   return {
     upiId: null,
+    upiAccountHolder: null,
     bankAccountHolder: null,
     bankAccountNumber: null,
     bankIfsc: null,

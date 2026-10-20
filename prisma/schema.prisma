@@ -152,6 +152,7 @@ model DepositSetting {
   id                 String   @id
   key                String   @unique @default("default")
   upiId              String?
+  upiAccountHolder   String?
   bankAccountHolder  String?
   bankAccountNumber  String?
   bankIfsc           String?
