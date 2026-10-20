@@ -640,10 +640,10 @@ function renderApp() {
     <div class="admin-shell">
       <aside class="sidebar">
         <div class="brand-block">
-          <div class="brand-mark">U</div>
+          <div class="brand-mark">G</div>
           <div>
             <p class="eyebrow">FINTECH ADMIN</p>
-            <h2>Upward</h2>
+            <h2>GrowUP Investments</h2>
           </div>
         </div>
 
