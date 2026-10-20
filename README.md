@@ -50,6 +50,15 @@ If you want Render to run the backend from the `backend` folder, the `render.yam
 
 OTP emails use Brevo's HTTPS API at `https://api.brevo.com/v3/smtp/email`, so SMTP host, port, and password variables are not used. Verify the sender address in Brevo before deploying.
 
+## Referral download links and APK updates
+
+- The app shares links in the form `https://smartgrowup.com/download/REFERRAL_CODE`.
+- The download page offers the current APK at `/app.apk` and an `upwardinvestments://signup?ref=REFERRAL_CODE` link for opening an already-installed app with the referral code.
+- The app's signup screen reads that deep link and pre-fills the referral code. If a recipient installs the APK first, they should return to the link and tap **Open app**, or enter the displayed code manually.
+- APK files are not stored in Git or on Render's ephemeral filesystem. Attach a **persistent disk** to the Render web service, mounted at `/var/data`, and set `APP_APK_PATH=/var/data/current-app.apk`. Persistent disks require a paid Render service plan.
+- After deploying the backend, replace the APK by running `node scripts/upload_app_apk.js /path/to/signed-app.apk` from the `backend` directory. The script asks for an admin session token without echoing it. Each successful upload atomically replaces the previous APK.
+- The logged-in admin must have a valid session. The public referral/download page is read-only; APK replacement requires admin authentication.
+
 ## Auto-push backend changes to GitHub
 
 You can run a small watcher that will automatically commit and push any changes in this folder to a target GitHub repository.

@@ -420,6 +420,7 @@ const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
 const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
+const APP_APK_PATH = (process.env.APP_APK_PATH || '').trim();
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_DELAY_SECONDS = 60;
@@ -771,6 +772,110 @@ function toIndiaMidnight(date) {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/download/:referralCode', (req, res) => {
+  const referralCode = normalizeReferralCode(req.params.referralCode);
+  if (!referralCode || referralCode.length > 32) {
+    return res.status(400).send('Invalid referral link.');
+  }
+
+  const deepLink = `upwardinvestments://signup?ref=${encodeURIComponent(referralCode)}`;
+  return res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#090b15" />
+  <title>Get GrowUP Investments</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#090b15;color:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(100%,440px);padding:32px;border:1px solid #26334e;border-radius:28px;background:#111b31;box-shadow:0 24px 70px #0006}h1{margin:0 0 12px;font-size:30px}p{color:#a8b5ca;line-height:1.55}.code{padding:14px;border-radius:14px;background:#0b1428;color:#fbbf24;text-align:center;font-size:22px;font-weight:800;letter-spacing:2px}.button{display:block;margin-top:16px;padding:16px;border-radius:999px;background:linear-gradient(100deg,#35bff1,#f7a514);color:#fff;text-align:center;text-decoration:none;font-weight:800}.secondary{background:#1e2a43;border:1px solid #34435f}.hint{font-size:13px;text-align:center}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Join GrowUP Investments</h1>
+    <p>Download the app and enter this referral code when you sign up:</p>
+    <div class="code">${referralCode}</div>
+    <a class="button" href="/app.apk">Download Android app</a>
+    <a class="button secondary" href="${deepLink}">Open app</a>
+    <p class="hint">After installing, return to this page and tap “Open app” to carry your referral code into signup. You can also enter the code manually.</p>
+  </main>
+  <script>setTimeout(() => { window.location.href = '/app.apk'; }, 900);</script>
+</body>
+</html>`);
+});
+
+app.get('/app.apk', async (req, res) => {
+  if (!APP_APK_PATH) {
+    return res.status(503).send('App download is not configured yet. Please contact customer support.');
+  }
+
+  const apkPath = path.resolve(APP_APK_PATH);
+  try {
+    await fs.promises.access(apkPath, fs.constants.R_OK);
+    return res.download(apkPath, 'GrowUP-Investments.apk');
+  } catch (error) {
+    console.error('[app-download] APK file is unavailable:', error?.message || error);
+    return res.status(404).send('The app download is temporarily unavailable. Please contact customer support.');
+  }
+});
+
+const appApkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 150 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    if (!file.originalname.toLowerCase().endsWith('.apk')) {
+      return callback(new Error('Upload an APK file.'));
+    }
+    return callback(null, true);
+  },
+});
+
+async function requireAppApkAdmin(req, res, next) {
+  try {
+    const session = await getSessionFromRequest(req);
+    if (!session) return res.status(401).json({ error: 'Missing admin token' });
+    const admin = await prisma.admin.findUnique({ where: { username: session.email }, select: { id: true } });
+    if (!admin) return res.status(403).json({ error: 'Admin access required' });
+    return next();
+  } catch (error) {
+    console.error('[app-download] Admin authorization failed:', error?.message || error);
+    return res.status(500).json({ error: 'Unable to authorize APK upload.' });
+  }
+}
+
+app.post('/api/admin/app-apk', requireAppApkAdmin, (req, res) => {
+  appApkUpload.single('apk')(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(uploadError.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: uploadError.message });
+    }
+    if (!APP_APK_PATH) {
+      return res.status(503).json({ error: 'Persistent APK storage is not configured.' });
+    }
+
+    try {
+      if (!req.file) return res.status(400).json({ error: 'Choose an APK file to upload.' });
+      if (req.file.buffer.length < 4 || req.file.buffer.readUInt32LE(0) !== 0x04034b50) {
+        return res.status(400).json({ error: 'The uploaded file is not a valid APK archive.' });
+      }
+
+      const apkPath = path.resolve(APP_APK_PATH);
+      const apkDirectory = path.dirname(apkPath);
+      await fs.promises.mkdir(apkDirectory, { recursive: true });
+      const temporaryPath = `${apkPath}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+      await fs.promises.writeFile(temporaryPath, req.file.buffer, { mode: 0o644 });
+      await fs.promises.rename(temporaryPath, apkPath);
+
+      console.log('[app-download] APK replaced by an authenticated admin.', {
+        bytes: req.file.size,
+      });
+      return res.json({ message: 'Current app APK replaced successfully.', bytes: req.file.size });
+    } catch (error) {
+      console.error('[app-download] APK replacement failed:', error?.message || error);
+      return res.status(500).json({ error: 'Unable to replace the app APK.' });
+    }
+  });
 });
 
 // --- Admin endpoints (used by the admin UI served at /admin) ---
