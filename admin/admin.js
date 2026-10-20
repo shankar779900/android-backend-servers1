@@ -786,61 +786,29 @@ async function renderAppDownload() {
         </div>
       </section>
       <section class="panel-card">
-        <p>Referral links use the latest APK here: <a href="/app.apk" target="_blank" rel="noreferrer">Download current APK</a>.</p>
-        <div class="alert" id="app-apk-status">Checking the current APK…</div>
-        <div class="input-group">
-          <label for="app-apk-file">Choose a signed Android APK</label>
-          <input id="app-apk-file" type="file" accept=".apk,application/vnd.android.package-archive" />
-        </div>
+        <p>Referral download links send users to the latest APK attached to a public GitHub Release.</p>
+        <div class="alert" id="app-apk-status">Checking the latest APK release…</div>
         <div class="toolbar top-space">
-          <button class="button" id="replace-app-apk" type="button">Replace current APK</button>
+          <a class="button" href="/app.apk" target="_blank" rel="noreferrer">Test APK download</a>
+          <a class="button secondary" href="https://github.com/shankar779900/android-backend-servers1/releases/new" target="_blank" rel="noreferrer">Create / update GitHub Release</a>
         </div>
-        <p class="hint">Upload a release-signed APK. Each successful upload atomically replaces the APK used by every referral download link.</p>
+        <p class="hint">Attach a release-signed APK named <strong>GrowUP-Investments.apk</strong> to each new release. Keep the repository public so users can download the release asset. The referral link always uses GitHub's latest-release URL.</p>
       </section>
     </div>
   `;
 
   const status = document.getElementById('app-apk-status');
-  const button = document.getElementById('replace-app-apk');
-  const fileInput = document.getElementById('app-apk-file');
-
   try {
     const response = await fetchWithAuth('/api/admin/app-apk');
     const data = await readResponse(response);
     if (!response.ok) throw new Error(data.error || 'Unable to check the APK status.');
-    status.textContent = data.available
-      ? `Current APK is ready (${(data.size / (1024 * 1024)).toFixed(1)} MB). Last updated ${formatDate(data.updatedAt)}.`
-      : 'No APK has been uploaded yet. Referral pages will show the download as unavailable until you upload one.';
+    status.innerHTML = data.available
+      ? `Release ${data.releaseTag || ''} has the current APK (${(data.size / (1024 * 1024)).toFixed(1)} MB), updated ${formatDate(data.updatedAt)}. <a href="${data.downloadUrl}" target="_blank" rel="noreferrer">Download APK</a>`
+      : `No public release contains <strong>GrowUP-Investments.apk</strong> yet. <a href="${data.releaseUrl}" target="_blank" rel="noreferrer">Create a GitHub Release</a> and attach the signed APK.`;
     status.classList.toggle('ok', Boolean(data.available));
   } catch (error) {
     status.textContent = error.message || 'Unable to check the APK status.';
   }
-
-  button.addEventListener('click', async () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file || !file.name.toLowerCase().endsWith('.apk')) {
-      showAlert('Choose a valid .apk file first.');
-      return;
-    }
-    if (!window.confirm(`Replace the current referral download with ${file.name}?`)) return;
-
-    button.disabled = true;
-    button.textContent = 'Uploading…';
-    try {
-      const formData = new FormData();
-      formData.append('apk', file);
-      const response = await fetchWithAuth('/api/admin/app-apk', { method: 'POST', body: formData });
-      const data = await readResponse(response);
-      if (!response.ok) throw new Error(data.error || 'APK upload failed.');
-      createToast(data.message || 'APK replaced successfully.', 'success');
-      renderAppDownload();
-    } catch (error) {
-      showAlert(error.message || 'APK upload failed.');
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Replace current APK';
-    }
-  });
 }
 
 async function renderHome() {

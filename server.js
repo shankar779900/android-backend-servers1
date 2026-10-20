@@ -420,7 +420,10 @@ const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
 const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
-const APP_APK_PATH = (process.env.APP_APK_PATH || '/var/data/current-app.apk').trim();
+const APP_APK_DOWNLOAD_URL = (
+  process.env.APP_APK_DOWNLOAD_URL ||
+  'https://github.com/shankar779900/android-backend-servers1/releases/latest/download/GrowUP-Investments.apk'
+).trim();
 const ADMIN_PANEL_PATH = (process.env.ADMIN_PANEL_PATH || '/overgearred/admin').replace(/\/+$/, '') || '/overgearred/admin';
 
 const OTP_EXPIRY_MINUTES = 5;
@@ -808,29 +811,16 @@ app.get('/download/:referralCode', (req, res) => {
 });
 
 app.get('/app.apk', async (req, res) => {
-  if (!APP_APK_PATH) {
-    return res.status(503).send('App download is not configured yet. Please contact customer support.');
-  }
-
-  const apkPath = path.resolve(APP_APK_PATH);
   try {
-    await fs.promises.access(apkPath, fs.constants.R_OK);
-    return res.download(apkPath, 'GrowUP-Investments.apk');
-  } catch (error) {
-    console.error('[app-download] APK file is unavailable:', error?.message || error);
-    return res.status(404).send('The app download is temporarily unavailable. Please contact customer support.');
-  }
-});
-
-const appApkUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 150 * 1024 * 1024, files: 1 },
-  fileFilter: (req, file, callback) => {
-    if (!file.originalname.toLowerCase().endsWith('.apk')) {
-      return callback(new Error('Upload an APK file.'));
+    const target = new URL(APP_APK_DOWNLOAD_URL);
+    if (target.protocol !== 'https:' || target.hostname !== 'github.com') {
+      return res.status(503).send('The app download is not configured safely. Please contact customer support.');
     }
-    return callback(null, true);
-  },
+    return res.redirect(302, target.toString());
+  } catch (error) {
+    console.error('[app-download] Invalid download URL:', error?.message || error);
+    return res.status(503).send('The app download is temporarily unavailable. Please contact customer support.');
+  }
 });
 
 async function requireAppApkAdmin(req, res, next) {
@@ -848,47 +838,35 @@ async function requireAppApkAdmin(req, res, next) {
 
 app.get('/api/admin/app-apk', requireAppApkAdmin, async (req, res) => {
   try {
-    const stats = await fs.promises.stat(path.resolve(APP_APK_PATH));
-    if (!stats.isFile()) return res.json({ available: false });
-    return res.json({ available: true, size: stats.size, updatedAt: stats.mtime.toISOString() });
+    const latestRelease = await axios.get(
+      'https://api.github.com/repos/shankar779900/android-backend-servers1/releases/latest',
+      {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'GrowUP-Investments-Backend' },
+        timeout: 8000,
+      },
+    );
+    const apkAsset = (latestRelease.data?.assets || []).find((asset) => asset.name === 'GrowUP-Investments.apk');
+    return res.json({
+      available: Boolean(apkAsset),
+      provider: 'GitHub Releases',
+      downloadUrl: APP_APK_DOWNLOAD_URL,
+      releaseUrl: 'https://github.com/shankar779900/android-backend-servers1/releases/new',
+      releaseTag: latestRelease.data?.tag_name || null,
+      updatedAt: apkAsset?.updated_at || null,
+      size: apkAsset?.size || null,
+    });
   } catch (error) {
-    if (error?.code === 'ENOENT') return res.json({ available: false });
-    console.error('[app-download] APK status check failed:', error?.message || error);
-    return res.status(500).json({ error: 'Unable to check the current app APK.' });
-  }
-});
-
-app.post('/api/admin/app-apk', requireAppApkAdmin, (req, res) => {
-  appApkUpload.single('apk')(req, res, async (uploadError) => {
-    if (uploadError) {
-      return res.status(uploadError.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: uploadError.message });
-    }
-    if (!APP_APK_PATH) {
-      return res.status(503).json({ error: 'Persistent APK storage is not configured.' });
-    }
-
-    try {
-      if (!req.file) return res.status(400).json({ error: 'Choose an APK file to upload.' });
-      if (req.file.buffer.length < 4 || req.file.buffer.readUInt32LE(0) !== 0x04034b50) {
-        return res.status(400).json({ error: 'The uploaded file is not a valid APK archive.' });
-      }
-
-      const apkPath = path.resolve(APP_APK_PATH);
-      const apkDirectory = path.dirname(apkPath);
-      await fs.promises.mkdir(apkDirectory, { recursive: true });
-      const temporaryPath = `${apkPath}.${crypto.randomBytes(8).toString('hex')}.tmp`;
-      await fs.promises.writeFile(temporaryPath, req.file.buffer, { mode: 0o644 });
-      await fs.promises.rename(temporaryPath, apkPath);
-
-      console.log('[app-download] APK replaced by an authenticated admin.', {
-        bytes: req.file.size,
+    if (error?.response?.status === 404) {
+      return res.json({
+        available: false,
+        provider: 'GitHub Releases',
+        downloadUrl: APP_APK_DOWNLOAD_URL,
+        releaseUrl: 'https://github.com/shankar779900/android-backend-servers1/releases/new',
       });
-      return res.json({ message: 'Current app APK replaced successfully.', bytes: req.file.size });
-    } catch (error) {
-      console.error('[app-download] APK replacement failed:', error?.message || error);
-      return res.status(500).json({ error: 'Unable to replace the app APK.' });
     }
-  });
+    console.error('[app-download] GitHub release status check failed:', error?.message || error);
+    return res.status(502).json({ error: 'Unable to check the latest GitHub release.' });
+  }
 });
 
 // --- Admin API endpoints (all sensitive actions still require authentication) ---
