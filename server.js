@@ -421,6 +421,7 @@ const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
 const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
 const APP_APK_PATH = (process.env.APP_APK_PATH || '/var/data/current-app.apk').trim();
+const ADMIN_PANEL_PATH = (process.env.ADMIN_PANEL_PATH || '/overgearred/admin').replace(/\/+$/, '') || '/overgearred/admin';
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_DELAY_SECONDS = 60;
@@ -488,10 +489,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Serve the admin static UI at /admin
+// Serve the admin UI at a non-obvious path; admin APIs still require authentication.
 const adminStaticPath = path.join(__dirname, 'admin');
-app.use('/admin', express.static(adminStaticPath));
-app.get('/admin/*', (req, res) => {
+app.use(ADMIN_PANEL_PATH, express.static(adminStaticPath));
+app.get(`${ADMIN_PANEL_PATH}/*`, (req, res) => {
   res.sendFile(path.join(adminStaticPath, 'index.html'));
 });
 
@@ -890,7 +891,7 @@ app.post('/api/admin/app-apk', requireAppApkAdmin, (req, res) => {
   });
 });
 
-// --- Admin endpoints (used by the admin UI served at /admin) ---
+// --- Admin API endpoints (all sensitive actions still require authentication) ---
 app.post('/api/admin/signup', async (req, res) => {
   const { username, password, creationKey } = req.body || {};
   if (!username || !password || !creationKey) return res.status(400).json({ error: 'username, password and creationKey are required' });
