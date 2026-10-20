@@ -653,6 +653,7 @@ function renderApp() {
           <button class="nav-item" data-nav="users">App Users</button>
           <button class="nav-item" data-nav="wallet">Add Wallet Balance</button>
           <button class="nav-item" data-nav="payment">Payment Details</button>
+          <button class="nav-item" data-nav="app-download">App Download</button>
         </nav>
       </aside>
 
@@ -770,7 +771,76 @@ function renderMain(view) {
   if (view === 'users') return renderUsers();
   if (view === 'wallet') return renderWallet();
   if (view === 'payment') return renderPayment();
+  if (view === 'app-download') return renderAppDownload();
   if (view === 'pending') return renderPending();
+}
+
+async function renderAppDownload() {
+  const main = document.getElementById('main-area');
+  main.innerHTML = `
+    <div class="page-shell">
+      <section class="page-header">
+        <div>
+          <p class="eyebrow">REFERRAL INSTALLS</p>
+          <h2>Current Android app download</h2>
+        </div>
+      </section>
+      <section class="panel-card">
+        <p>Referral links use the latest APK here: <a href="/app.apk" target="_blank" rel="noreferrer">Download current APK</a>.</p>
+        <div class="alert" id="app-apk-status">Checking the current APK…</div>
+        <div class="input-group">
+          <label for="app-apk-file">Choose a signed Android APK</label>
+          <input id="app-apk-file" type="file" accept=".apk,application/vnd.android.package-archive" />
+        </div>
+        <div class="toolbar top-space">
+          <button class="button" id="replace-app-apk" type="button">Replace current APK</button>
+        </div>
+        <p class="hint">Upload a release-signed APK. Each successful upload atomically replaces the APK used by every referral download link.</p>
+      </section>
+    </div>
+  `;
+
+  const status = document.getElementById('app-apk-status');
+  const button = document.getElementById('replace-app-apk');
+  const fileInput = document.getElementById('app-apk-file');
+
+  try {
+    const response = await fetchWithAuth('/api/admin/app-apk');
+    const data = await readResponse(response);
+    if (!response.ok) throw new Error(data.error || 'Unable to check the APK status.');
+    status.textContent = data.available
+      ? `Current APK is ready (${(data.size / (1024 * 1024)).toFixed(1)} MB). Last updated ${formatDate(data.updatedAt)}.`
+      : 'No APK has been uploaded yet. Referral pages will show the download as unavailable until you upload one.';
+    status.classList.toggle('ok', Boolean(data.available));
+  } catch (error) {
+    status.textContent = error.message || 'Unable to check the APK status.';
+  }
+
+  button.addEventListener('click', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file || !file.name.toLowerCase().endsWith('.apk')) {
+      showAlert('Choose a valid .apk file first.');
+      return;
+    }
+    if (!window.confirm(`Replace the current referral download with ${file.name}?`)) return;
+
+    button.disabled = true;
+    button.textContent = 'Uploading…';
+    try {
+      const formData = new FormData();
+      formData.append('apk', file);
+      const response = await fetchWithAuth('/api/admin/app-apk', { method: 'POST', body: formData });
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(data.error || 'APK upload failed.');
+      createToast(data.message || 'APK replaced successfully.', 'success');
+      renderAppDownload();
+    } catch (error) {
+      showAlert(error.message || 'APK upload failed.');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Replace current APK';
+    }
+  });
 }
 
 async function renderHome() {

@@ -420,7 +420,7 @@ const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
 const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
-const APP_APK_PATH = (process.env.APP_APK_PATH || '').trim();
+const APP_APK_PATH = (process.env.APP_APK_PATH || '/var/data/current-app.apk').trim();
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_RESEND_DELAY_SECONDS = 60;
@@ -844,6 +844,18 @@ async function requireAppApkAdmin(req, res, next) {
     return res.status(500).json({ error: 'Unable to authorize APK upload.' });
   }
 }
+
+app.get('/api/admin/app-apk', requireAppApkAdmin, async (req, res) => {
+  try {
+    const stats = await fs.promises.stat(path.resolve(APP_APK_PATH));
+    if (!stats.isFile()) return res.json({ available: false });
+    return res.json({ available: true, size: stats.size, updatedAt: stats.mtime.toISOString() });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return res.json({ available: false });
+    console.error('[app-download] APK status check failed:', error?.message || error);
+    return res.status(500).json({ error: 'Unable to check the current app APK.' });
+  }
+});
 
 app.post('/api/admin/app-apk', requireAppApkAdmin, (req, res) => {
   appApkUpload.single('apk')(req, res, async (uploadError) => {

@@ -55,9 +55,10 @@ OTP emails use Brevo's HTTPS API at `https://api.brevo.com/v3/smtp/email`, so SM
 - The app shares links in the form `https://smartgrowup.com/download/REFERRAL_CODE`.
 - The download page offers the current APK at `/app.apk` and an `upwardinvestments://signup?ref=REFERRAL_CODE` link for opening an already-installed app with the referral code.
 - The app's signup screen reads that deep link and pre-fills the referral code. If a recipient installs the APK first, they should return to the link and tap **Open app**, or enter the displayed code manually.
-- APK files are not stored in Git or on Render's ephemeral filesystem. Attach a **persistent disk** to the Render web service, mounted at `/var/data`, and set `APP_APK_PATH=/var/data/current-app.apk`. Persistent disks require a paid Render service plan.
-- After deploying the backend, replace the APK by running `node scripts/upload_app_apk.js /path/to/signed-app.apk` from the `backend` directory. The script asks for an admin session token without echoing it. Each successful upload atomically replaces the previous APK.
-- The logged-in admin must have a valid session. The public referral/download page is read-only; APK replacement requires admin authentication.
+- APK files are not stored in Git or on Render's ephemeral filesystem. Attach a **persistent disk** to the Render web service, mounted at `/var/data`. The backend defaults to `APP_APK_PATH=/var/data/current-app.apk`; override this environment variable only if the disk uses a different mount path. Persistent disks require a paid Render service plan.
+- After deploying the backend and attaching the disk, sign in to `https://smartgrowup.com/admin/`, open **App Download**, and upload a signed APK. Each successful upload atomically replaces the previous APK, so all referral links automatically download the latest file.
+- Alternatively, run `node scripts/upload_app_apk.js /path/to/signed-app.apk` from the `backend` directory. The script asks for an admin session token without echoing it. APK replacement requires an authenticated admin session.
+- The `/download/REFERRAL_CODE` page displays the code and starts the download. Its **Open app** action passes the code into signup when the app is already installed. A recipient who installs first can return to the page and tap **Open app** or enter the code manually.
 
 ## Auto-push backend changes to GitHub
 
