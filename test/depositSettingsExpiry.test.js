@@ -20,6 +20,7 @@ test('deposit settings stay active for 20 minutes and expire at the deadline', (
 test('expired settings can clear every admin-provided payment field', () => {
   assert.deepEqual(getDepositSettingsExpiryFields(), {
     upiId: null,
+    upiAccountHolder: null,
     bankAccountHolder: null,
     bankAccountNumber: null,
     bankIfsc: null,

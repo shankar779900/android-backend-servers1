@@ -1651,11 +1651,12 @@ async function renderPayment() {
             <div class="input-group"><label>UPI account holder name</label><input id="s-upi-holder" value="${settings.upiAccountHolder || ''}" /></div>
             <div class="input-group"><label>Deposit instructions</label><textarea id="s-instructions">${settings.instructions || ''}</textarea></div>
             <div class="input-group">
-              <label>QR Code</label>
+              <label>QR Code (optional)</label>
               <div class="file-preview">
                 ${settings.qrCodePath ? `<img id="qr-preview" src="${settings.qrCodePath}" alt="qr" />` : '<div class="empty-state">No QR uploaded</div>'}
                 <input id="s-qr" type="file" accept="image/*" />
               </div>
+              <small class="hint">You can save payment details without uploading a QR code. Users can pay using the UPI ID.</small>
             </div>
           </div>
         </div>
