@@ -1,4 +1,4 @@
-import { ActivityIndicator, AppState, Linking, StyleSheet, View, StatusBar } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, StyleSheet, View, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { useEffect, useState, useRef } from 'react';
@@ -122,10 +122,12 @@ function AppNavigation() {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       const routeName = navigationRef.current?.getCurrentRoute?.()?.name;
       if (nextAppState === 'active') {
-        if (isAuthenticated && routeName === 'HomeTab' && !hasPromptedRef.current) {
+        if (Platform.OS !== 'web' && isAuthenticated && routeName === 'HomeTab' && !hasPromptedRef.current) {
           hasPromptedRef.current = true;
           setInvestmentLocked(true);
         }
@@ -160,7 +162,7 @@ function AppNavigation() {
       theme={navTheme}
       onReady={() => {
         const routeName = navigationRef.current?.getCurrentRoute?.()?.name;
-        if (isAuthenticated && routeName === 'HomeTab' && !hasPromptedRef.current) {
+        if (Platform.OS !== 'web' && isAuthenticated && routeName === 'HomeTab' && !hasPromptedRef.current) {
             hasPromptedRef.current = true;
             setInvestmentLocked(true);
           }
@@ -198,7 +200,7 @@ function AppNavigation() {
         )}
       </Stack.Navigator>
       </NavigationContainer>
-      {isAuthenticated && investmentLocked ? <UnlockScreen onUnlock={() => setInvestmentLocked(false)} /> : null}
+      {Platform.OS !== 'web' && isAuthenticated && investmentLocked ? <UnlockScreen onUnlock={() => setInvestmentLocked(false)} /> : null}
     </View>
     </>
   );
