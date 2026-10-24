@@ -2490,6 +2490,16 @@ app.post('/api/wallet/withdraw', async (req, res) => {
   }
 });
 
+// Serve the customer web app from the same Render service as the API and admin portal.
+// Keep this after API and download routes so existing endpoints retain precedence.
+const customerWebDistPath = path.join(__dirname, 'public-web');
+if (fs.existsSync(path.join(customerWebDistPath, 'index.html'))) {
+  app.use(express.static(customerWebDistPath, { index: false, fallthrough: true }));
+  app.get('/', (req, res) => res.sendFile(path.join(customerWebDistPath, 'index.html')));
+} else {
+  app.get('/', (req, res) => res.status(503).send('Customer web app is not deployed yet.'));
+}
+
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
