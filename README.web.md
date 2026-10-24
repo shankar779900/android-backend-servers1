@@ -8,7 +8,9 @@ Install the project dependencies, then run `npm run web`. Expo starts the browse
 
 ## Build for hosting
 
-Run `npx expo export --platform web`. Expo writes the static website to `dist/`. Deploy the contents of that folder to a static web host such as Vercel, Netlify, or Render Static Sites. Configure SPA fallback/rewrite requests to `index.html` if the host requires it.
+Run `node scripts/build-web.js`. This exports the static website into `dist/` and adds the PWA manifest and app icons. Deploy the contents of that folder to a static web host such as Vercel, Netlify, or Render Static Sites. Configure SPA fallback/rewrite requests to `index.html` if the host requires it.
+
+Serve the deployed site over HTTPS. On Android, open it in Chrome and choose **Install app** or **Add to Home screen** from the browser menu. On iPhone, open it in Safari, tap **Share**, then **Add to Home Screen**. The installed PWA opens in its own window but still needs an internet connection for app and account services.
 
 The backend must remain reachable over HTTPS from the deployed website. Its CORS configuration currently allows browser origins; if that policy is tightened, add the deployed website's origin to the backend allowlist.
 
