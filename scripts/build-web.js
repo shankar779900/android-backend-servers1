@@ -4,6 +4,7 @@ const { execFileSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
 const outputDirectory = path.join(projectRoot, 'dist');
+const backendWebDirectory = path.join(projectRoot, 'backend', 'public-web');
 
 execFileSync('npx', ['expo', 'export', '--platform', 'web'], {
   cwd: projectRoot,
@@ -45,4 +46,7 @@ if (!html.includes('rel="manifest"')) {
   fs.writeFileSync(htmlPath, html);
 }
 
-console.log('Prepared installable web app in dist/.');
+fs.rmSync(backendWebDirectory, { recursive: true, force: true });
+fs.cpSync(outputDirectory, backendWebDirectory, { recursive: true });
+
+console.log('Prepared installable web app in dist/ and backend/public-web/.');

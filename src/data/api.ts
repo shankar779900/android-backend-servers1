@@ -14,7 +14,8 @@ async function request(path: string, options: RequestInit = {}) {
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    const requestUrl = Platform.OS === 'web' ? path : `${API_BASE_URL}${path}`;
+    response = await fetch(requestUrl, { ...options, headers });
   } catch {
     throw new Error('Unable to connect to the service. Check your internet connection and try again.');
   }
