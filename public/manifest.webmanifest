@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Upward Investments",
-  "short_name": "Upward",
-  "description": "Manage your Upward Investments account, wallet, and portfolio.",
+  "name": "GrowUp Investments",
+  "short_name": "GrowUp",
+  "description": "Manage your GrowUp Investments account, wallet, and portfolio.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

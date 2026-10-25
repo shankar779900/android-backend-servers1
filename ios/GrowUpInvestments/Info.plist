@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Grow Up</string>
+    <string>GrowUp Investments</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,8 +27,8 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>upwardinvestments</string>
-          <string>com.upward.investments</string>
+          <string>growupinvestments</string>
+          <string>com.growup.investments</string>
         </array>
       </dict>
     </array>

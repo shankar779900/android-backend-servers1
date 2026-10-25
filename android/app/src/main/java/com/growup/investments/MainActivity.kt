@@ -1,4 +1,4 @@
-package com.upward.investments
+package com.growup.investments
 
 import android.os.Build
 import android.os.Bundle

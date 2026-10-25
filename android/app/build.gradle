@@ -95,9 +95,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.upward.investments'
+    namespace 'com.growup.investments'
     defaultConfig {
-        applicationId 'com.upward.investments'
+        applicationId 'com.growup.investments'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 3

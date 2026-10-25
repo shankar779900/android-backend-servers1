@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Upward Investments",
-    "slug": "upward-investments",
+    "name": "GrowUp Investments",
+    "slug": "growup-investments",
     "icon": "./assets/icon_reference.png",
     "web": {
       "bundler": "metro",
       "output": "single",
-      "name": "Upward Investments",
-      "shortName": "Upward",
-      "description": "Manage your Upward Investments account, wallet, and portfolio.",
+      "name": "GrowUp Investments",
+      "shortName": "GrowUp",
+      "description": "Manage your GrowUp Investments account, wallet, and portfolio.",
       "themeColor": "#090b15",
       "backgroundColor": "#090b15",
       "display": "standalone",

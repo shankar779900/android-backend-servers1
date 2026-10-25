@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { fetchPortfolio, purchasePlan } from '../data/api';
+import { fetchPortfolio, fetchWalletBalance, purchasePlan } from '../data/api';
 import { investmentPlans, type InvestmentPlan } from '../data/plans';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import PrimaryButton from '../components/PrimaryButton';
@@ -115,100 +115,94 @@ export default function HomeScreen() {
       return;
     }
 
-    Alert.alert(
-      'Confirm purchase',
-      `Purchase ${plan.planName} for ${plan.amountLabel}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-            onPress: async () => {
-            if (purchasingPlanRef.current) return;
+    const confirmPurchase = async () => {
+      if (purchasingPlanRef.current) return;
+      purchasingPlanRef.current = true;
+      // Give immediate feedback while the wallet balance is being checked.
+      setPurchasingPlanId(plan.id);
+      try {
+        // The locally cached user balance may be stale after wallet changes.
+        const wallet = await fetchWalletBalance();
+        const currentBalance = Number(wallet.balance ?? user.balance ?? 0);
+        await updateUser({ balance: currentBalance });
+        if (currentBalance < plan.amount) {
+          showError('Your wallet balance is not enough for this plan.');
+          return;
+        }
 
-            if (user.balance < plan.amount) {
-                          purchasingPlanRef.current = true;
-                          setPurchasingPlanId(plan.id);
-              showError('Your wallet balance is not enough for this plan.');
-              return;
-            }
+        // Ensure client does not attempt unsupported plan amounts for this plan type.
+        const allowedAmountsForType = investmentPlans.filter((p) => p.planType === plan.planType).map((p) => p.amount);
+        if (!allowedAmountsForType.includes(plan.amount)) {
+          showError('This plan is not available. Please choose a supported amount.');
+          return;
+        }
 
-              // Ensure client does not attempt unsupported plan amounts for this plan type
-              const allowedAmountsForType = investmentPlans.filter((p) => p.planType === plan.planType).map((p) => p.amount);
-              if (!allowedAmountsForType.includes(plan.amount)) {
-                showError('This plan is not available. Please choose a supported amount.');
-                return;
-              }
+        if (__DEV__) console.log('HomeScreen: purchasing plan', { planId: plan.id, amount: plan.amount, user: user?.email, token: Boolean(token) });
+        const result = await purchasePlan({
+          planId: plan.id,
+          planName: plan.planName,
+          planType: plan.planType,
+          amount: plan.amount,
+          amountLabel: plan.amountLabel,
+          returnLabel: plan.returnLabel,
+          returnPercent: plan.returnPercent,
+          durationLabel: plan.durationLabel,
+          totalReturn: plan.totalReturn,
+          premium: plan.premium,
+        });
 
-            setPurchasingPlanId(plan.id);
-            try {
-              if (__DEV__) console.log('HomeScreen: purchasing plan', { planId: plan.id, amount: plan.amount, user: user?.email, token: Boolean(token) });
-              const result = await purchasePlan({
-                planId: plan.id,
-                planName: plan.planName,
-                planType: plan.planType,
-                amount: plan.amount,
-                amountLabel: plan.amountLabel,
-                returnLabel: plan.returnLabel,
-                returnPercent: plan.returnPercent,
-                durationLabel: plan.durationLabel,
-                totalReturn: plan.totalReturn,
-                premium: plan.premium,
-              });
+        if (result) {
+          if (result.balance != null) await updateUser({ balance: result.balance });
+          if (result.plans) {
+            setPurchasedPlans(result.plans);
+          } else {
+            const nextPlans = [...purchasedPlans, { ...plan, purchasedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + parseDays(plan.durationLabel) * 24 * 60 * 60 * 1000).toISOString() }];
+            setPurchasedPlans(nextPlans);
+          }
+        }
 
-              // Optimistic UI: apply returned balance and plans immediately
-              if (result) {
-                if (result.balance != null) {
-                  await updateUser({ balance: result.balance });
-                }
-                if (result.plans) {
-                  setPurchasedPlans(result.plans);
-                } else {
-                  const nextPlans = [...purchasedPlans, { ...plan, purchasedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + parseDays(plan.durationLabel) * 24 * 60 * 60 * 1000).toISOString() }];
-                  setPurchasedPlans(nextPlans);
-                }
-              }
+        void refreshPortfolioData(false);
+        showSuccess(`${plan.planName} purchased successfully.`);
+      } catch (error: any) {
+        const body = error?.body || (error?.response && error.response.body) || null;
+        function formatSeconds(s: number) {
+          if (!s || s <= 0) return 'less than a minute';
+          const days = Math.floor(s / (24 * 3600));
+          const hours = Math.floor((s % (24 * 3600)) / 3600);
+          const minutes = Math.floor((s % 3600) / 60);
+          const parts: string[] = [];
+          if (days) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+          if (hours) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+          if (!days && minutes) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+          return parts.length ? parts.join(' ') : 'less than a minute';
+        }
 
-              // Trigger background refreshes (don't await)
-              void refreshPortfolioData(false);
+        if (body?.code === 'FNO_ACTIVE') {
+          showError(body.error || 'You already have this F&O plan active.');
+        } else if (body?.code === 'FNO_COOLDOWN') {
+          const secs = Number(body.retryAfterSeconds || 0);
+          showError(body.error ? `${body.error}. Try again in ${formatSeconds(secs)}` : `You can purchase this plan again in ${formatSeconds(secs)}`);
+        } else {
+          showError(body?.error || error.message || 'Unable to complete purchase.');
+        }
+      } finally {
+        purchasingPlanRef.current = false;
+        setPurchasingPlanId(null);
+      }
+    };
 
-              showSuccess(`${plan.planName} purchased successfully.`);
-            } catch (error: any) {
-              // If backend returned retry info (attempted within 30 days), show friendly message
-              const body = error?.body || (error?.response && error.response.body) || null;
-              function formatSeconds(s: number) {
-                if (!s || s <= 0) return 'less than a minute';
-                const days = Math.floor(s / (24 * 3600));
-                const hours = Math.floor((s % (24 * 3600)) / 3600);
-                const minutes = Math.floor((s % 3600) / 60);
-                const parts: string[] = [];
-                if (days) parts.push(`${days} day${days > 1 ? 's' : ''}`);
-                if (hours) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-                if (!days && minutes) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
-                return parts.length ? parts.join(' ') : 'less than a minute';
-              }
+    const confirmationMessage = `Purchase ${plan.planName} for ${plan.amountLabel}?`;
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(confirmationMessage)) {
+        void confirmPurchase();
+      }
+      return;
+    }
 
-              if (body) {
-                if (body.code === 'FNO_ACTIVE') {
-                  showError(body.error || 'You already have this F&O plan active.');
-                } else if (body.code === 'FNO_COOLDOWN') {
-                  const secs = Number(body.retryAfterSeconds || 0);
-                  showError(body.error ? `${body.error}. Try again in ${formatSeconds(secs)}` : `You can purchase this plan again in ${formatSeconds(secs)}`);
-                } else if (body.error) {
-                  showError(body.error);
-                } else {
-                  showError(error.message || 'Unable to complete purchase.');
-                }
-              } else {
-                showError(error.message || 'Unable to complete purchase.');
-              }
-            } finally {
-              purchasingPlanRef.current = false;
-              setPurchasingPlanId(null);
-            }
-          },
-        },
-      ],
-    );
+    Alert.alert('Confirm purchase', confirmationMessage, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', onPress: () => void confirmPurchase() },
+    ]);
   };
 
   return (

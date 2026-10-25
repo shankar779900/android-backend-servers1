@@ -22,8 +22,8 @@ export default function ReferralScreen() {
 
     try {
       await Share.share({
-        title: 'Join GrowUP Investments',
-        message: `Join me on GrowUP Investments. Download the app and use my referral code ${referralCode}: ${referralLink}`,
+        title: 'Join GrowUp Investments',
+        message: `Join me on GrowUp Investments. Download the app and use my referral code ${referralCode}: ${referralLink}`,
         url: referralLink,
       });
     } catch {

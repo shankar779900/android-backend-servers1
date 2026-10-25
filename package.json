@@ -1,5 +1,5 @@
 {
-  "name": "upward-investments-mobile",
+  "name": "growup-investments-mobile",
   "private": true,
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
@@ -8,12 +8,19 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "web:build": "node scripts/build-web.js",
     "backend": "node backend/server.js",
     "worker": "node backend/workers/finalizeWorker.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "test:backend:unit": "node --test backend/test/depositSettingsExpiry.test.js backend/test/depositVerification.test.js backend/test/investmentPlanAvailability.test.js backend/test/otpFlow.test.js backend/test/referralProgram.test.js backend/test/weeklyEarnings.test.js",
+    "test:backend:integration": "node --test backend/test/claimEarnings.integration.test.js"
   },
   "jest": {
     "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/src/**/*.test.ts",
+      "<rootDir>/backend/test/finalize.test.js"
+    ],
     "verbose": true
   },
   "dependencies": {
