@@ -21,6 +21,7 @@ const {
   isDepositSettingsExpired,
 } = require('./services/depositSettingsExpiry');
 const { validateOtpSendRequest, shouldAllowExistingUserOtp } = require('./utils/otpFlow');
+const { bankAddOtpPurpose, generateOtp } = require('./utils/otpCodes');
 const { getAllowedPlanAmounts } = require('./utils/investmentPlanAvailability');
 const {
   normalizeReferralCode,
@@ -421,7 +422,7 @@ app.set('trust proxy', 1);
 const port = process.env.PORT || 4000;
 const BREVO_API_KEY = (process.env.BREVO_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
-const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUP Investments').trim();
+const EMAIL_FROM_NAME = (process.env.EMAIL_FROM_NAME || 'GrowUp Investments').trim();
 const APP_APK_DOWNLOAD_URL = (
   process.env.APP_APK_DOWNLOAD_URL ||
   'https://github.com/shankar779900/android-backend-servers1/releases/latest/download/GrowUP-Investments.apk'
@@ -518,10 +519,6 @@ function createId() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function generateOTP() {
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
 async function canSendOTP(email, purpose = 'signup') {
   const lastOtp = await prisma.oTP.findFirst({
     where: { email, purpose },
@@ -544,7 +541,7 @@ async function canSendOTP(email, purpose = 'signup') {
 }
 
 async function createOtpRecord(email, purpose = 'signup') {
-  const otp = generateOTP();
+  const otp = generateOtp(purpose);
   const hashedOtp = await bcrypt.hash(otp, 10);
 
   await prisma.oTP.deleteMany({ where: { email, purpose } });
@@ -572,15 +569,21 @@ async function sendEmailOTP(email, purpose = 'signup') {
 
   const otp = await createOtpRecord(email, purpose);
 
-  const isPasswordReset = purpose === 'password_reset';
-  const messagePurpose = isPasswordReset ? 'password reset' : 'signup verification';
+  const purposeLabels = {
+    signup: { label: 'signup verification', subject: 'Your signup verification code' },
+    password_reset: { label: 'password reset', subject: 'Your password reset code' },
+    login: { label: 'sign-in verification', subject: 'Your sign-in verification code' },
+    bank_add: { label: 'bank account verification', subject: 'Verify your new bank account' },
+  };
+  const isBankAdd = String(purpose).startsWith('bank_add_');
+  const { label: messagePurpose, subject } = isBankAdd ? purposeLabels.bank_add : (purposeLabels[purpose] || purposeLabels.signup);
   const payload = {
     sender: { name: EMAIL_FROM_NAME, email: EMAIL_FROM },
     to: [{ email }],
-    subject: isPasswordReset ? 'Your password reset code' : 'Your signup verification code',
+    subject,
     htmlContent: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #7c3aed;">GrowUP Investments</h2>
+        <h2 style="color: #7c3aed;">GrowUp Investments</h2>
         <p>Hello,</p>
         <p>Your ${messagePurpose} code is:</p>
         <div style="background-color: #f3f4f6; padding: 20px; text-align: center; margin: 20px 0;">
@@ -589,7 +592,7 @@ async function sendEmailOTP(email, purpose = 'signup') {
         <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
         <p>If you did not request this code, please ignore this email.</p>
         <br />
-        <p>Best regards,<br />GrowUP Investments Team</p>
+        <p>Best regards,<br />GrowUp Investments Team</p>
       </div>
     `,
   };
@@ -751,7 +754,7 @@ async function getSessionFromRequest(req) {
   }
 }
 
-const TOTP_ISSUER = 'Upward Investments';
+const TOTP_ISSUER = 'GrowUp Investments';
 
 function createTwoFactorSecret() {
   return authenticator.generateSecret();
@@ -786,21 +789,21 @@ app.get('/download/:referralCode', (req, res) => {
     return res.status(400).send('Invalid referral link.');
   }
 
-  const deepLink = `upwardinvestments://signup?ref=${encodeURIComponent(referralCode)}`;
+  const deepLink = `growupinvestments://signup?ref=${encodeURIComponent(referralCode)}`;
   return res.type('html').send(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#090b15" />
-  <title>Get GrowUP Investments</title>
+  <title>Get GrowUp Investments</title>
   <style>
     *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#090b15;color:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(100%,440px);padding:32px;border:1px solid #26334e;border-radius:28px;background:#111b31;box-shadow:0 24px 70px #0006}h1{margin:0 0 12px;font-size:30px}p{color:#a8b5ca;line-height:1.55}.code{padding:14px;border-radius:14px;background:#0b1428;color:#fbbf24;text-align:center;font-size:22px;font-weight:800;letter-spacing:2px}.button{display:block;margin-top:16px;padding:16px;border-radius:999px;background:linear-gradient(100deg,#35bff1,#f7a514);color:#fff;text-align:center;text-decoration:none;font-weight:800}.secondary{background:#1e2a43;border:1px solid #34435f}.hint{font-size:13px;text-align:center}
   </style>
 </head>
 <body>
   <main class="card">
-    <h1>Join GrowUP Investments</h1>
+    <h1>Join GrowUp Investments</h1>
     <p>Download the app and enter this referral code when you sign up:</p>
     <div class="code">${referralCode}</div>
     <a class="button" href="/app.apk">Download Android app</a>
@@ -1387,6 +1390,55 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  const rateLimit = await canSendOTP(user.email, 'login');
+  if (!rateLimit.allowed) {
+    return res.status(429).json({
+      error: `Please wait ${rateLimit.retryAfterSeconds} seconds before requesting a new OTP.`,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+  }
+
+  try {
+    await sendEmailOTP(user.email, 'login');
+  } catch (error) {
+    console.error('[login-otp] Failed to send email', error?.cause?.message || error?.message || error);
+    return res.status(500).json({ error: 'Unable to send sign-in verification code right now.' });
+  }
+
+  return res.json({ requiresOtp: true, email: user.email });
+});
+
+app.post('/api/login/send-otp', async (req, res) => {
+  const { identifier, password } = req.body || {};
+  if (!identifier || !password) return res.status(400).json({ error: 'Identifier and password are required' });
+
+  const normalizedIdentifier = String(identifier).trim();
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ email: normalizedIdentifier.toLowerCase() }, { phoneNumber: normalizedIdentifier }] },
+  });
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const rateLimit = await canSendOTP(user.email, 'login');
+  if (!rateLimit.allowed) {
+    return res.status(429).json({
+      error: `Please wait ${rateLimit.retryAfterSeconds} seconds before requesting a new OTP.`,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+  }
+
+  try {
+    await sendEmailOTP(user.email, 'login');
+  } catch (error) {
+    console.error('[login-otp] Resend failed', error?.cause?.message || error?.message || error);
+    return res.status(500).json({ error: 'Unable to send sign-in verification code right now.' });
+  }
+
+  return res.json({ message: 'A new sign-in code has been sent to your registered email.' });
+});
+
+async function createUserSession(user, res) {
   const safeUser = {
     username: user.username,
     email: user.email,
@@ -1394,10 +1446,6 @@ app.post('/api/login', async (req, res) => {
     balance: user.balance,
     twoFactorEnabled: Boolean(user.twoFactorEnabled),
   };
-
-  if (user.twoFactorEnabled) {
-    return res.json({ requires2fa: true, email: user.email });
-  }
 
   const token = createToken();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -1449,6 +1497,44 @@ app.post('/api/login', async (req, res) => {
     console.warn('[login] warm data load failed', err?.message || err);
     return res.json({ user: safeUser, token });
   }
+}
+
+async function consumeOTP(email, otp, purpose) {
+  const otpRecord = await prisma.oTP.findFirst({
+    where: { email, purpose, verified: false, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!otpRecord || (otpRecord.attempts ?? 0) >= OTP_MAX_VERIFY_ATTEMPTS) return false;
+
+  const isValid = await bcrypt.compare(String(otp), otpRecord.otp);
+  if (!isValid) {
+    const attempts = (otpRecord.attempts ?? 0) + 1;
+    if (attempts >= OTP_MAX_VERIFY_ATTEMPTS) {
+      await prisma.oTP.delete({ where: { id: otpRecord.id } });
+    } else {
+      await prisma.oTP.update({ where: { id: otpRecord.id }, data: { attempts } });
+    }
+    return false;
+  }
+
+  const consumed = await prisma.oTP.updateMany({
+    where: { id: otpRecord.id, verified: false, expiresAt: { gt: new Date() } },
+    data: { verified: true },
+  });
+  return consumed.count === 1;
+}
+
+app.post('/api/login/verify-otp', async (req, res) => {
+  const { email, otp } = req.body || {};
+  if (!email || !otp) return res.status(400).json({ error: 'Email and OTP are required' });
+
+  const user = await prisma.user.findUnique({ where: { email: String(email).trim().toLowerCase() } });
+  if (!user || !(await consumeOTP(user.email, otp, 'login'))) {
+    return res.status(400).json({ error: 'Invalid or expired OTP' });
+  }
+
+  await prisma.oTP.deleteMany({ where: { email: user.email, purpose: 'login' } });
+  return createUserSession(user, res);
 });
 
 app.post('/api/2fa/setup', async (req, res) => {
@@ -1851,6 +1937,39 @@ app.get('/api/wallet/bank-accounts', async (req, res) => {
   res.json({ bankAccounts: accounts.map(maskBankAccount) });
 });
 
+app.post('/api/wallet/bank-accounts/send-otp', async (req, res) => {
+  const session = await getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'Missing auth token' });
+
+  const validated = validateBankAccountInput(req.body);
+  if (validated.error) return res.status(400).json({ error: validated.error });
+
+  const existing = await prisma.bankAccount.findFirst({
+    where: { userId: session.userId, accountNumber: validated.value.accountNumber },
+  });
+  if (existing) return res.status(409).json({ error: 'This bank account is already saved' });
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const otpPurpose = bankAddOtpPurpose(user.id, validated.value.accountNumber);
+  const rateLimit = await canSendOTP(user.email, otpPurpose);
+  if (!rateLimit.allowed) {
+    return res.status(429).json({
+      error: `Please wait ${rateLimit.retryAfterSeconds} seconds before requesting a new OTP.`,
+      retryAfterSeconds: rateLimit.retryAfterSeconds,
+    });
+  }
+
+  try {
+    await sendEmailOTP(user.email, otpPurpose);
+    return res.json({ message: 'A verification code was sent to your registered email.' });
+  } catch (error) {
+    console.error('[bank-add-otp] Failed to send email', error?.cause?.message || error?.message || error);
+    return res.status(500).json({ error: 'Unable to send bank account verification code right now.' });
+  }
+});
+
 // Public endpoint for clients to read current deposit settings
 app.get('/api/wallet/deposit-settings', async (req, res) => {
   try {
@@ -1882,10 +2001,16 @@ app.post('/api/wallet/bank-accounts', async (req, res) => {
   const validated = validateBankAccountInput(req.body);
   if (validated.error) return res.status(400).json({ error: validated.error });
   const { holder, accountNumber, bankName, ifsc, branchName } = validated.value;
+  const { otp } = req.body || {};
 
   const existing = await prisma.bankAccount.findFirst({ where: { userId: session.userId, accountNumber } });
   if (existing) {
     return res.status(409).json({ error: 'This bank account is already saved' });
+  }
+
+  const otpPurpose = bankAddOtpPurpose(session.userId, accountNumber);
+  if (!otp || !(await consumeOTP(session.email, otp, otpPurpose))) {
+    return res.status(400).json({ error: 'A valid bank account verification OTP is required' });
   }
 
   const newAccount = await prisma.bankAccount.create({
@@ -1897,7 +2022,7 @@ app.post('/api/wallet/bank-accounts', async (req, res) => {
       ifscCode: String(ifsc).trim(),
       bankName: String(bankName).trim(),
       branchName: String(branchName || '').trim(),
-      isVerified: false,
+      isVerified: true,
     },
   });
 
