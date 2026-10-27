@@ -56,6 +56,7 @@ export default function WalletActionScreen() {
   const [utrNumber, setUtrNumber] = useState('');
   const [bankForm, setBankForm] = useState({ holder: '', accountNumber: '', confirmAccountNumber: '', bankName: '', ifsc: '' });
   const [bankError, setBankError] = useState('');
+  const [showNewBankAccountForm, setShowNewBankAccountForm] = useState(false);
   const [bankOtp, setBankOtp] = useState('');
   const [bankOtpSent, setBankOtpSent] = useState(false);
   const [sendingBankOtp, setSendingBankOtp] = useState(false);
@@ -421,6 +422,7 @@ export default function WalletActionScreen() {
       setBankForm({ holder: '', accountNumber: '', confirmAccountNumber: '', bankName: '', ifsc: '' });
       setBankOtp('');
       setBankOtpSent(false);
+      setShowNewBankAccountForm(false);
       showSuccess('Bank account added successfully.');
     } catch (error: any) {
       setBankError(getErrorMessage(error, 'Unable to add bank account.'));
@@ -777,75 +779,9 @@ export default function WalletActionScreen() {
 
         {action === 'bank' && (
           <>
-            {bankError ? (
-              (() => {
-                const { getUserFriendlyError } = require('../utils/networkErrors');
-                const friendly = getUserFriendlyError(bankError);
-                return friendly ? <Text style={styles.errorText}>{friendly}</Text> : <Text style={styles.errorText}>{bankError}</Text>;
-              })()
-            ) : null}
-            <TextInput
-              value={bankForm.holder}
-              onChangeText={(value) => updateBankForm('holder', value)}
-              placeholder="Account holder name"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-            <TextInput
-              value={bankForm.accountNumber}
-              onChangeText={(value) => updateBankForm('accountNumber', value)}
-              keyboardType="numeric"
-              placeholder="Account number"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-            <TextInput
-              value={bankForm.confirmAccountNumber}
-              onChangeText={(value) => updateBankForm('confirmAccountNumber', value)}
-              keyboardType="numeric"
-              placeholder="Confirm account number"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-            <TextInput
-              value={bankForm.bankName}
-              onChangeText={(value) => updateBankForm('bankName', value)}
-              placeholder="Bank name"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-            <TextInput
-              value={bankForm.ifsc}
-              onChangeText={(value) => updateBankForm('ifsc', value)}
-              placeholder="IFSC code"
-              placeholderTextColor="#64748b"
-              style={styles.input}
-            />
-            <Text style={styles.bankVerificationHint}>Enter the email code to verify and save this account automatically.</Text>
-            <View style={styles.bankOtpRow}>
-              <TextInput
-                value={bankOtp}
-                onChangeText={handleBankOtpChange}
-                placeholder="6-digit email OTP"
-                placeholderTextColor="#64748b"
-                keyboardType="number-pad"
-                maxLength={6}
-                style={[styles.input, styles.bankOtpInput]}
-                editable={bankOtpSent && !processing}
-              />
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleSendBankOtp}
-                disabled={sendingBankOtp || processing}
-                style={({ pressed }) => [styles.bankOtpSendButton, (pressed || sendingBankOtp || processing) && styles.bankOtpSendButtonDisabled]}
-              >
-                <Text style={styles.bankOtpSendText}>{sendingBankOtp ? 'Sending…' : bankOtpSent ? 'Resend OTP' : 'Send OTP'}</Text>
-              </Pressable>
-            </View>
-            {processing ? <Text style={styles.bankVerificationHint}>Verifying code and saving account…</Text> : null}
             <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Saved bank accounts</Text>
             {bankAccounts.length === 0 ? (
-              <Text style={styles.emptyText}>No bank account added.</Text>
+              <Text style={styles.emptyText}>No saved bank accounts yet.</Text>
             ) : (
               bankAccounts.map((account) => (
                 <View key={account.id} style={styles.bankAccountCard}>
@@ -860,6 +796,88 @@ export default function WalletActionScreen() {
                 </View>
               ))
             )}
+            <PrimaryButton
+              title={showNewBankAccountForm ? 'Cancel adding bank account' : 'Add new bank account'}
+              onPress={() => {
+                setBankError('');
+                setShowNewBankAccountForm((visible) => !visible);
+                setBankOtp('');
+                setBankOtpSent(false);
+              }}
+              disabled={processing || sendingBankOtp}
+              compact
+              style={styles.addBankAccountButton}
+            />
+            {showNewBankAccountForm ? (
+              <View style={styles.newBankAccountForm}>
+                {bankError ? (
+                  (() => {
+                    const { getUserFriendlyError } = require('../utils/networkErrors');
+                    const friendly = getUserFriendlyError(bankError);
+                    return friendly ? <Text style={styles.errorText}>{friendly}</Text> : <Text style={styles.errorText}>{bankError}</Text>;
+                  })()
+                ) : null}
+                <TextInput
+                  value={bankForm.holder}
+                  onChangeText={(value) => updateBankForm('holder', value)}
+                  placeholder="Account holder name"
+                  placeholderTextColor="#64748b"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bankForm.accountNumber}
+                  onChangeText={(value) => updateBankForm('accountNumber', value)}
+                  keyboardType="numeric"
+                  placeholder="Account number"
+                  placeholderTextColor="#64748b"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bankForm.confirmAccountNumber}
+                  onChangeText={(value) => updateBankForm('confirmAccountNumber', value)}
+                  keyboardType="numeric"
+                  placeholder="Confirm account number"
+                  placeholderTextColor="#64748b"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bankForm.bankName}
+                  onChangeText={(value) => updateBankForm('bankName', value)}
+                  placeholder="Bank name"
+                  placeholderTextColor="#64748b"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bankForm.ifsc}
+                  onChangeText={(value) => updateBankForm('ifsc', value)}
+                  placeholder="IFSC code"
+                  placeholderTextColor="#64748b"
+                  style={styles.input}
+                />
+                <Text style={styles.bankVerificationHint}>Enter the email code to verify and save this account automatically.</Text>
+                <View style={styles.bankOtpRow}>
+                  <TextInput
+                    value={bankOtp}
+                    onChangeText={handleBankOtpChange}
+                    placeholder="6-digit email OTP"
+                    placeholderTextColor="#64748b"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    style={[styles.input, styles.bankOtpInput]}
+                    editable={bankOtpSent && !processing}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleSendBankOtp}
+                    disabled={sendingBankOtp || processing}
+                    style={({ pressed }) => [styles.bankOtpSendButton, (pressed || sendingBankOtp || processing) && styles.bankOtpSendButtonDisabled]}
+                  >
+                    <Text style={styles.bankOtpSendText}>{sendingBankOtp ? 'Sending…' : bankOtpSent ? 'Resend OTP' : 'Send OTP'}</Text>
+                  </Pressable>
+                </View>
+                {processing ? <Text style={styles.bankVerificationHint}>Verifying code and saving account…</Text> : null}
+              </View>
+            ) : null}
           </>
         )}
       </SectionCard>
@@ -1028,6 +1046,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  addBankAccountButton: {
+    marginTop: 18,
+  },
+  newBankAccountForm: {
+    marginTop: 18,
   },
   bankOtpInput: {
     flex: 1,
