@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { fetchUserProfile, login, verifyTwoFactor } from '../data/api';
+import { login, resendLoginOtp, verifyLoginOtp } from '../data/api';
 import PrimaryButton from '../components/PrimaryButton';
 import SectionCard from '../components/SectionCard';
 
@@ -19,48 +19,20 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [pendingLoginEmail, setPendingLoginEmail] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const [resendingOtp, setResendingOtp] = useState(false);
+  const otpAttemptInFlight = useRef(false);
 
   const handleLogin = async () => {
     setLoading(true);
     try {
       const data = await login(identifier, password);
-      if (data.requires2fa) {
+      if (data.requiresOtp) {
         setPendingLoginEmail(data.email);
         setCode('');
+        showSuccess('A 6-digit sign-in verification code was sent to your email.');
         return;
       }
-
-      // prefer server payload but fall back to previously cached values if server omitted them
-      try {
-        const [cachedWallet, cachedBank, cachedPortfolio] = await Promise.all([
-          AsyncStorage.getItem('cachedWallet'),
-          AsyncStorage.getItem('cachedBankAccounts'),
-          AsyncStorage.getItem('cachedPortfolio'),
-        ]);
-
-        const merged = {
-          wallet: data.wallet || (cachedWallet ? JSON.parse(cachedWallet) : null),
-          bankAccounts: data.bankAccounts || (cachedBank ? JSON.parse(cachedBank) : null),
-          portfolio: data.portfolio || (cachedPortfolio ? JSON.parse(cachedPortfolio) : null),
-          ts: Date.now(),
-        };
-        if (__DEV__) console.log('LoginScreen: initialLoginData to save', merged);
-        await AsyncStorage.setItem('initialLoginData', JSON.stringify(merged));
-      } catch (e) {
-        console.warn('Unable to save initial login data', (e as any)?.message || e);
-      }
-
-      await signIn(data.user, data.token);
-      const walletTransactions = data.wallet?.transactions || [];
-      const bankAccounts = data.bankAccounts || [];
-      const portfolio = data.portfolio || null;
-      try { setTransactions(walletTransactions); } catch (e) {}
-      try { setBankAccounts(bankAccounts); } catch (e) {}
-      try { setPortfolio(portfolio); } catch (e) {}
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
+      showError('The connected server did not start OTP verification. Please update the backend and try again.');
     } catch (error: any) {
       showError(error.message || 'Unable to login');
     } finally {
@@ -68,35 +40,66 @@ export default function LoginScreen() {
     }
   };
 
-  const handleTwoFactorSubmit = async () => {
-    if (!pendingLoginEmail) return;
+  const completeLogin = async (data: any) => {
+    try {
+      const [cachedWallet, cachedBank, cachedPortfolio] = await Promise.all([
+        AsyncStorage.getItem('cachedWallet'),
+        AsyncStorage.getItem('cachedBankAccounts'),
+        AsyncStorage.getItem('cachedPortfolio'),
+      ]);
+      const initialLoginData = {
+        wallet: data.wallet || (cachedWallet ? JSON.parse(cachedWallet) : null),
+        bankAccounts: data.bankAccounts || (cachedBank ? JSON.parse(cachedBank) : null),
+        portfolio: data.portfolio || (cachedPortfolio ? JSON.parse(cachedPortfolio) : null),
+        ts: Date.now(),
+      };
+      await AsyncStorage.setItem('initialLoginData', JSON.stringify(initialLoginData));
+    } catch (error: any) {
+      console.warn('Unable to save initial login data', error?.message || error);
+    }
 
+    await signIn(data.user, data.token);
+    setTransactions(data.wallet?.transactions || []);
+    setBankAccounts(data.bankAccounts || []);
+    setPortfolio(data.portfolio || null);
+    setPendingLoginEmail(null);
+    setCode('');
+  };
+
+  const verifyLoginCode = async (otp: string) => {
+    if (!pendingLoginEmail || otp.length !== 6 || otpAttemptInFlight.current) return;
+
+    otpAttemptInFlight.current = true;
     setLoading(true);
     try {
-      const data = await verifyTwoFactor(pendingLoginEmail, code);
-      try {
-        const payload = { wallet: data.wallet || null, bankAccounts: data.bankAccounts || null, portfolio: data.portfolio || null, ts: Date.now() };
-        if (__DEV__) console.log('LoginScreen: 2FA initialLoginData to save', payload);
-        await AsyncStorage.setItem('initialLoginData', JSON.stringify(payload));
-      } catch (e) {
-        console.warn('Unable to save initial login data', (e as any)?.message || e);
-      }
-      if (__DEV__) console.log('LoginScreen: calling signIn for', data.user?.email);
-      await signIn(data.user, data.token);
-      if (__DEV__) console.log('LoginScreen: signIn complete');
-      try { setTransactions(data.wallet?.transactions || []); } catch (e) {}
-      try { setBankAccounts(data.bankAccounts || []); } catch (e) {}
-      try { setPortfolio(data.portfolio || null); } catch (e) {}
-      setPendingLoginEmail(null);
-      setCode('');
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
+      const data = await verifyLoginOtp(pendingLoginEmail, otp);
+      await completeLogin(data);
     } catch (error: any) {
       showError(error.message || 'Unable to verify code');
+      setCode('');
     } finally {
+      otpAttemptInFlight.current = false;
       setLoading(false);
+    }
+  };
+
+  const handleLoginOtpChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 6);
+    setCode(cleaned);
+    if (cleaned.length === 6) void verifyLoginCode(cleaned);
+  };
+
+  const handleResendLoginOtp = async () => {
+    if (!pendingLoginEmail || resendingOtp || !identifier || !password) return;
+    setResendingOtp(true);
+    try {
+      await resendLoginOtp(identifier, password);
+      showSuccess('A new sign-in code was sent to your registered email.');
+      setCode('');
+    } catch (error: any) {
+      showError(error.message || 'Unable to resend the sign-in code');
+    } finally {
+      setResendingOtp(false);
     }
   };
 
@@ -142,17 +145,28 @@ export default function LoginScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.verificationHint}>Enter the 6-digit code from your authenticator app.</Text>
-                <TextInput
-                  value={code}
-                  onChangeText={setCode}
-                  placeholder="123456"
-                  placeholderTextColor="#94a3b8"
-                  style={styles.input}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-                <PrimaryButton title={loading ? 'Verifying…' : 'Verify code'} onPress={handleTwoFactorSubmit} disabled={loading || code.length !== 6} loading={loading} />
+                <Text style={styles.verificationHint}>Enter the 6-digit sign-in code sent to your registered email.</Text>
+                <View style={styles.otpRow}>
+                  <TextInput
+                    value={code}
+                    onChangeText={handleLoginOtpChange}
+                    placeholder="6-digit OTP"
+                    placeholderTextColor="#94a3b8"
+                    style={[styles.input, styles.otpInput]}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    editable={!loading}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleResendLoginOtp}
+                    disabled={resendingOtp || loading}
+                    style={({ pressed }) => [styles.resendButton, (pressed || resendingOtp || loading) && styles.resendButtonDisabled]}
+                  >
+                    <Text style={styles.resendButtonText}>{resendingOtp ? 'Sending…' : 'Resend code'}</Text>
+                  </Pressable>
+                </View>
+                {loading ? <Text style={styles.verificationHint}>Verifying code…</Text> : null}
                 <Text onPress={() => setPendingLoginEmail(null)} style={styles.forgotLink}>Back to login</Text>
               </>
             )}
@@ -228,6 +242,32 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     marginBottom: 12,
     fontSize: 14,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  otpInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  resendButton: {
+    marginLeft: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  resendButtonDisabled: {
+    opacity: 0.55,
+  },
+  resendButtonText: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '700',
   },
   footerRow: {
     marginTop: 20,

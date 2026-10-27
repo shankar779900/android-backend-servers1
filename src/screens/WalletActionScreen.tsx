@@ -12,6 +12,7 @@ import {
   fetchWalletBalance,
   fetchBankAccounts,
   createBankAccount,
+  sendBankAccountOtp,
   deleteBankAccount,
   withdraw,
 } from '../data/api';
@@ -55,6 +56,9 @@ export default function WalletActionScreen() {
   const [utrNumber, setUtrNumber] = useState('');
   const [bankForm, setBankForm] = useState({ holder: '', accountNumber: '', confirmAccountNumber: '', bankName: '', ifsc: '' });
   const [bankError, setBankError] = useState('');
+  const [bankOtp, setBankOtp] = useState('');
+  const [bankOtpSent, setBankOtpSent] = useState(false);
+  const [sendingBankOtp, setSendingBankOtp] = useState(false);
   const [walletError, setWalletError] = useState('');
 
   useFocusEffect(
@@ -332,12 +336,10 @@ export default function WalletActionScreen() {
     }
   };
 
-  const handleAddBankAccount = async () => {
+  const handleAddBankAccount = async (otp: string) => {
     if (processingRef.current) return;
 
     const { holder, accountNumber, confirmAccountNumber, bankName, ifsc } = bankForm;
-      processingRef.current = true;
-      setProcessing(true);
     setBankError('');
 
     const normalizedAccountNumber = accountNumber.trim();
@@ -351,6 +353,12 @@ export default function WalletActionScreen() {
       return;
     }
 
+    if (!bankOtpSent || otp.length !== 6) {
+      setBankError('Verify your bank account request using the 6-digit email OTP first.');
+      return;
+    }
+
+    processingRef.current = true;
     setProcessing(true);
     try {
       const resp = await createBankAccount({
@@ -358,6 +366,7 @@ export default function WalletActionScreen() {
         accountNumber: normalizedAccountNumber,
         bankName: bankName.trim(),
         ifsc: ifsc.trim().toUpperCase(),
+        otp,
       });
 
       // If API returned the created bank account, insert it immediately
@@ -410,13 +419,64 @@ export default function WalletActionScreen() {
       }
 
       setBankForm({ holder: '', accountNumber: '', confirmAccountNumber: '', bankName: '', ifsc: '' });
+      setBankOtp('');
+      setBankOtpSent(false);
       showSuccess('Bank account added successfully.');
     } catch (error: any) {
       setBankError(getErrorMessage(error, 'Unable to add bank account.'));
+      setBankOtp('');
     } finally {
       processingRef.current = false;
       setProcessing(false);
     }
+  };
+
+  const handleSendBankOtp = async () => {
+    const { holder, accountNumber, confirmAccountNumber, bankName, ifsc } = bankForm;
+    const normalizedAccountNumber = accountNumber.trim();
+    if (!holder.trim() || !normalizedAccountNumber || !confirmAccountNumber.trim() || !bankName.trim() || !ifsc.trim()) {
+      setBankError('Please fill in all bank account fields first.');
+      return;
+    }
+    if (normalizedAccountNumber !== confirmAccountNumber.trim()) {
+      setBankError('Account numbers do not match.');
+      return;
+    }
+
+    setSendingBankOtp(true);
+    setBankError('');
+    try {
+      await sendBankAccountOtp({
+        holder: holder.trim(),
+        accountNumber: normalizedAccountNumber,
+        bankName: bankName.trim(),
+        ifsc: ifsc.trim().toUpperCase(),
+      });
+      setBankOtpSent(true);
+      setBankOtp('');
+      showSuccess('A 6-digit bank account verification code was sent to your registered email.');
+    } catch (error: any) {
+      setBankError(
+        error?.status === 404
+          ? 'Bank account OTP verification is not available on the connected server yet. Please deploy the latest backend and try again.'
+          : getErrorMessage(error, 'Unable to send bank account verification code.'),
+      );
+    } finally {
+      setSendingBankOtp(false);
+    }
+  };
+
+  const handleBankOtpChange = (value: string) => {
+    const cleaned = value.replace(/\D/g, '').slice(0, 6);
+    setBankOtp(cleaned);
+    setBankError('');
+    if (cleaned.length === 6) void handleAddBankAccount(cleaned);
+  };
+
+  const updateBankForm = (field: keyof typeof bankForm, value: string) => {
+    setBankForm((current) => ({ ...current, [field]: value }));
+    setBankOtpSent(false);
+    setBankOtp('');
   };
 
   const handleRemoveBankAccount = async (id: string) => {
@@ -495,9 +555,6 @@ export default function WalletActionScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.headerRow}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backText}>{'<'} Back</Text>
-        </Pressable>
         <Text style={styles.heading}>{titles[action]}</Text>
       </View>
 
@@ -729,14 +786,14 @@ export default function WalletActionScreen() {
             ) : null}
             <TextInput
               value={bankForm.holder}
-              onChangeText={(value) => setBankForm({ ...bankForm, holder: value })}
+              onChangeText={(value) => updateBankForm('holder', value)}
               placeholder="Account holder name"
               placeholderTextColor="#64748b"
               style={styles.input}
             />
             <TextInput
               value={bankForm.accountNumber}
-              onChangeText={(value) => setBankForm({ ...bankForm, accountNumber: value })}
+              onChangeText={(value) => updateBankForm('accountNumber', value)}
               keyboardType="numeric"
               placeholder="Account number"
               placeholderTextColor="#64748b"
@@ -744,7 +801,7 @@ export default function WalletActionScreen() {
             />
             <TextInput
               value={bankForm.confirmAccountNumber}
-              onChangeText={(value) => setBankForm({ ...bankForm, confirmAccountNumber: value })}
+              onChangeText={(value) => updateBankForm('confirmAccountNumber', value)}
               keyboardType="numeric"
               placeholder="Confirm account number"
               placeholderTextColor="#64748b"
@@ -752,19 +809,40 @@ export default function WalletActionScreen() {
             />
             <TextInput
               value={bankForm.bankName}
-              onChangeText={(value) => setBankForm({ ...bankForm, bankName: value })}
+              onChangeText={(value) => updateBankForm('bankName', value)}
               placeholder="Bank name"
               placeholderTextColor="#64748b"
               style={styles.input}
             />
             <TextInput
               value={bankForm.ifsc}
-              onChangeText={(value) => setBankForm({ ...bankForm, ifsc: value })}
+              onChangeText={(value) => updateBankForm('ifsc', value)}
               placeholder="IFSC code"
               placeholderTextColor="#64748b"
               style={styles.input}
             />
-            <PrimaryButton title={processing ? 'Processing…' : 'Add bank account'} onPress={handleAddBankAccount} disabled={processing} loading={processing} compact />
+            <Text style={styles.bankVerificationHint}>Enter the email code to verify and save this account automatically.</Text>
+            <View style={styles.bankOtpRow}>
+              <TextInput
+                value={bankOtp}
+                onChangeText={handleBankOtpChange}
+                placeholder="6-digit email OTP"
+                placeholderTextColor="#64748b"
+                keyboardType="number-pad"
+                maxLength={6}
+                style={[styles.input, styles.bankOtpInput]}
+                editable={bankOtpSent && !processing}
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleSendBankOtp}
+                disabled={sendingBankOtp || processing}
+                style={({ pressed }) => [styles.bankOtpSendButton, (pressed || sendingBankOtp || processing) && styles.bankOtpSendButtonDisabled]}
+              >
+                <Text style={styles.bankOtpSendText}>{sendingBankOtp ? 'Sending…' : bankOtpSent ? 'Resend OTP' : 'Send OTP'}</Text>
+              </Pressable>
+            </View>
+            {processing ? <Text style={styles.bankVerificationHint}>Verifying code and saving account…</Text> : null}
             <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Saved bank accounts</Text>
             {bankAccounts.length === 0 ? (
               <Text style={styles.emptyText}>No bank account added.</Text>
@@ -785,6 +863,9 @@ export default function WalletActionScreen() {
           </>
         )}
       </SectionCard>
+      <View style={styles.bottomButtonRow}>
+        <PrimaryButton title="Back" onPress={() => navigation.goBack()} compact />
+      </View>
     </ScrollView>
   );
 }
@@ -800,19 +881,6 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     marginBottom: 20,
-  },
-  backButton: {
-    marginBottom: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: '#111827',
-    alignSelf: 'flex-start',
-  },
-  backText: {
-    color: '#fbbf24',
-    fontWeight: '700',
-    fontSize: 16,
   },
   heading: {
     color: '#f8fafc',
@@ -843,6 +911,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
     padding: 22,
+  },
+  bottomButtonRow: {
+    alignItems: 'center',
+    marginTop: 24,
   },
   input: {
     backgroundColor: '#0f172a',
@@ -945,6 +1017,37 @@ const styles = StyleSheet.create({
   sectionHeading: {
     color: '#f8fafc',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  bankVerificationHint: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  bankOtpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bankOtpInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  bankOtpSendButton: {
+    marginLeft: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  bankOtpSendButtonDisabled: {
+    opacity: 0.55,
+  },
+  bankOtpSendText: {
+    color: '#fbbf24',
+    fontSize: 12,
     fontWeight: '700',
   },
   infoText: {

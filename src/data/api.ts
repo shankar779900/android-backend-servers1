@@ -43,6 +43,27 @@ export async function login(identifier: string, password: string) {
 export async function verifyTwoFactor(email: string, code: string) {
   return request('/api/2fa/verify', { method: 'POST', body: JSON.stringify({ email, code }) });
 }
+
+export async function verifyLoginOtp(email: string, otp: string) {
+  return request('/api/login/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+}
+
+export async function resendLoginOtp(identifier: string, password: string) {
+  return request('/api/login/send-otp', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
+export async function sendBankAccountOtp(account: { holder: string; accountNumber: string; bankName: string; ifsc: string; branchName?: string }) {
+  return request('/api/wallet/bank-accounts/send-otp', {
+    method: 'POST',
+    body: JSON.stringify(account),
+  });
+}
 export async function setupTwoFactor() { return request('/api/2fa/setup', { method: 'POST' }); }
 export async function enableTwoFactor(code: string) {
   return request('/api/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) });
@@ -94,7 +115,7 @@ export async function validateReferralCode(code: string) {
 export async function generateReferralCode() { return request('/api/referral/generate', { method: 'POST' }); }
 export async function fetchWalletBalance() { return request('/api/wallet/balance'); }
 export async function fetchBankAccounts() { return request('/api/wallet/bank-accounts'); }
-export async function createBankAccount(account: { holder: string; accountNumber: string; bankName: string; ifsc: string; branchName?: string }) {
+export async function createBankAccount(account: { holder: string; accountNumber: string; bankName: string; ifsc: string; branchName?: string; otp: string }) {
   return request('/api/wallet/bank-accounts', { method: 'POST', body: JSON.stringify(account) });
 }
 export async function deleteBankAccount(accountId: string) {
