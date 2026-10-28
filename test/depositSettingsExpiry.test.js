@@ -8,11 +8,11 @@ const {
   isDepositSettingsExpired,
 } = require('../services/depositSettingsExpiry');
 
-test('deposit settings stay active for 20 minutes and expire at the deadline', () => {
+test('deposit settings stay active for 60 minutes and expire at the deadline', () => {
   const updatedAt = new Date('2026-10-12T12:00:00.000Z');
   const settings = { updatedAt };
 
-  assert.equal(getDepositSettingsExpiresAt(updatedAt).toISOString(), '2026-10-12T12:20:00.000Z');
+  assert.equal(getDepositSettingsExpiresAt(updatedAt).toISOString(), '2026-10-12T13:00:00.000Z');
   assert.equal(isDepositSettingsExpired(settings, updatedAt.getTime() + DEPOSIT_SETTINGS_TTL_MS - 1), false);
   assert.equal(isDepositSettingsExpired(settings, updatedAt.getTime() + DEPOSIT_SETTINGS_TTL_MS), true);
 });

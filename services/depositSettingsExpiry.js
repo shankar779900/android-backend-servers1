@@ -1,4 +1,4 @@
-const DEPOSIT_SETTINGS_TTL_MS = 20 * 60 * 1000;
+const DEPOSIT_SETTINGS_TTL_MS = 60 * 60 * 1000;
 
 function getDepositSettingsExpiresAt(updatedAt) {
   const updatedAtMs = new Date(updatedAt).getTime();
