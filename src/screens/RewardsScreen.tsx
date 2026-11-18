@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, Mask, Path, Rect } from 'react-native-svg';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -18,6 +18,43 @@ type ScratchCard = {
 
 function formatCurrency(value: number) {
   return `₹${Number(value || 0).toLocaleString('en-IN')}`;
+}
+
+const SCRATCH_ASSETS = {
+  below5000: {
+    cover: require('../../assets/assets/scratch-cover-below-5000.jpeg'),
+    reveal: require('../../assets/assets/assets/scratch-reveal-below-5000.jpeg'),
+  },
+  below20000: {
+    cover: require('../../assets/assets/assets/assets/scratch-cover-below-20000.png'),
+    reveal: require('../../assets/assets/assets/assets/scratch-reveal-below-20000.png'),
+  },
+  below50000: {
+    cover: require('../../assets/assets/assets/assets/assets/assets/scratch-cover-below-50000.png'),
+    reveal: require('../../assets/assets/assets/assets/scratch-reveal-below-50000.png'),
+  },
+  below100000: {
+    cover: require('../../assets/assets/assets/assets/assets/scratch-cover-below-100000.png'),
+    reveal: require('../../assets/assets/assets/assets/assets/scratch-reveal-below-100000.png'),
+  },
+  above100000: {
+    cover: require('../../assets/assets/assets/assets/scratch-cover-above-100000.png'),
+    reveal: require('../../assets/assets/assets/assets/scratch-reveal-above-100000.png'),
+  },
+  referral: {
+    cover: require('../../assets/assets/assets/assets/scratch-cover-refer.png'),
+    reveal: require('../../assets/assets/assets/assets/scratch-reveal-refer.png'),
+  },
+} as const;
+
+function getScratchAssets(card: ScratchCard) {
+  if (String(card.investmentName || '').toLowerCase().includes('referral')) return SCRATCH_ASSETS.referral;
+  const amount = Number(card.investmentAmount || 0);
+  if (amount < 5000) return SCRATCH_ASSETS.below5000;
+  if (amount <= 20000) return SCRATCH_ASSETS.below20000;
+  if (amount < 50000) return SCRATCH_ASSETS.below50000;
+  if (amount <= 100000) return SCRATCH_ASSETS.below100000;
+  return SCRATCH_ASSETS.above100000;
 }
 
 function ScratchCardTile({ card, onScratch }: { card: ScratchCard; onScratch: (id: string) => Promise<boolean> }) {
@@ -62,6 +99,8 @@ function ScratchCardTile({ card, onScratch }: { card: ScratchCard; onScratch: (i
     onPanResponderMove: (event) => addScratchPoint(event.nativeEvent.locationX, event.nativeEvent.locationY),
   })).current;
 
+  const { cover, reveal } = getScratchAssets(card);
+
   return (
     <View style={styles.card}>
       <View style={styles.cardTopRow}>
@@ -75,9 +114,10 @@ function ScratchCardTile({ card, onScratch }: { card: ScratchCard; onScratch: (i
 
       {card.scratchedAt ? (
         <View style={styles.revealedReward}>
-          <MaterialCommunityIcons name="wallet-plus-outline" size={26} color="#34d399" />
-          <View>
-            <Text style={styles.rewardCaption}>Credited to your wallet</Text>
+          <Image source={reveal} style={styles.revealImage} resizeMode="contain" />
+          <View style={styles.creditedBadge}>
+            <MaterialCommunityIcons name="wallet-plus-outline" size={20} color="#34d399" />
+            <Text style={styles.rewardCaption}>Credited to wallet</Text>
             <Text style={styles.rewardAmount}>{formatCurrency(card.rewardAmount || 0)}</Text>
           </View>
         </View>
@@ -97,7 +137,8 @@ function ScratchCardTile({ card, onScratch }: { card: ScratchCard; onScratch: (i
             accessibilityRole="button"
             accessibilityLabel="Scratch to reveal your reward"
           >
-            <Svg width="100%" height="104" viewBox={`0 0 ${scratchWidth} 104`}>
+            <Image source={cover} style={styles.scratchCover} resizeMode="cover" />
+            <Svg width="100%" height="104" viewBox={`0 0 ${scratchWidth} 104`} style={styles.scratchSvg}>
               <Defs>
                 <Mask id={`scratch-mask-${card.id}`} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
                   <Rect width="100%" height="104" fill="white" />
@@ -215,6 +256,8 @@ const styles = StyleSheet.create({
   previewLabel: { color: '#6ee7b7', fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
   previewAmount: { color: '#fff', fontSize: 23, fontWeight: '900', marginTop: 2 },
   scratchArea: { height: 104, borderRadius: 12, overflow: 'hidden', backgroundColor: '#94a3b8' },
+  scratchCover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 12 },
+  scratchSvg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   scratchPrompt: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   scratchPromptText: { color: '#0f172a', fontSize: 12, fontWeight: '800', marginTop: 3 },
   revealedReward: { minHeight: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#0f2c29', borderRadius: 14 },
@@ -224,4 +267,6 @@ const styles = StyleSheet.create({
   emptyCard: { alignItems: 'center', padding: 28, borderRadius: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#243247' },
   emptyTitle: { color: '#f8fafc', fontWeight: '800', fontSize: 16, marginTop: 12 },
   emptyText: { color: '#94a3b8', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 6 },
+  creditedBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, position: 'absolute', bottom: 8, left: 8, right: 8, paddingVertical: 6, borderRadius: 12, backgroundColor: '#111827', borderWidth: 1, borderColor: '#263449' },
+  revealImage: { width: '100%', height: 104, borderRadius: 12, marginBottom: 8 },
 });
