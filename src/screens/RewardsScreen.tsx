@@ -174,13 +174,6 @@ export default function RewardsScreen() {
         <View style={styles.headerSpacer} />
       </View>
       <Text style={styles.subtitle}>Scratch a card from your successful investment to reveal your reward. It will be added to your wallet automatically.</Text>
-      <View style={styles.tierInfo}>
-        <Text style={styles.tierTitle}>Scratch-card reward ranges</Text>
-        <Text style={styles.tierText}>Below ₹5,000: up to ₹100</Text>
-        <Text style={styles.tierText}>₹5,000–₹20,000: ₹100–₹300</Text>
-        <Text style={styles.tierText}>Above ₹20,000–₹1,00,000: ₹300–₹500</Text>
-        <Text style={styles.tierText}>Above ₹1,00,000: ₹500–₹1,000</Text>
-      </View>
 
       <View style={styles.listHeader}>
         <Text style={styles.sectionTitle}>Your scratch cards</Text>
@@ -209,9 +202,6 @@ const styles = StyleSheet.create({
   heading: { color: '#fff', fontSize: 28, fontWeight: '800' },
   headerSpacer: { width: 42 },
   subtitle: { color: '#94a3b8', fontSize: 14, lineHeight: 21, marginBottom: 18 },
-  tierInfo: { backgroundColor: '#111827', borderColor: '#243247', borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 24 },
-  tierTitle: { color: '#f8fafc', fontSize: 15, fontWeight: '800', marginBottom: 9 },
-  tierText: { color: '#cbd5e1', fontSize: 13, lineHeight: 21 },
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionTitle: { color: '#f8fafc', fontSize: 19, fontWeight: '800' },
   pendingCount: { color: '#fbbf24', fontSize: 12, fontWeight: '700' },
