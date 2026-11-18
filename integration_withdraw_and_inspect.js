@@ -20,15 +20,11 @@ function createToken() { return crypto.randomBytes(32).toString('hex'); }
     const hashed = '$2a$10$EzUe6cQmX4G3Q1kzG8Qf6e4yYQF0cHqG9Q2y3vV9G1Q9G1a';
     user = await prisma.user.create({ data: { id: createId(), username: 'testuser', email: `test+${Date.now()}@example.com`, password: hashed, balance: 0 } });
   }
-
-  const token = createToken();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await prisma.session.create({ data: { id: createId(), email: user.email, token, userId: user.id, expiresAt, updatedAt: new Date() } });
-
+      
   const base = 'http://localhost:4000';
   const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
-  console.log('Ensuring balance by depositing 10000');
+  console.log('Ensuring ba  lance by depositing 10000');
   try {
     const dep = await axios.post(`${base}/api/wallet/deposit`, { amount: 10000, paymentMethod: 'upi' }, authHeader);
     console.log('deposit response:', dep.data);

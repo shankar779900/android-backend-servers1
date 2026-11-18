@@ -23,7 +23,7 @@ function apiUrl(path) {
     return `${configuredBase.replace(/\/$/, '')}${normalizedPath}`;
   }
   if (window.location.protocol === 'file:') {
-    return `https://upward-investments-backend-server.onrender.com${normalizedPath}`;
+    return `https://growup-investments-backend-server.onrender.com${normalizedPath}`;
   }
   return normalizedPath;
 }
@@ -643,7 +643,7 @@ function renderApp() {
           <div class="brand-mark">G</div>
           <div>
             <p class="eyebrow">FINTECH ADMIN</p>
-            <h2>GrowUP Investments</h2>
+            <h2>GrowUp Investments</h2>
           </div>
         </div>
 

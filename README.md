@@ -1,6 +1,6 @@
-# Upward Investments Backend
+# GrowUp Investments Backend
 
-This folder contains the Node.js/Express backend for the Upward Investments application.
+This folder contains the Node.js/Express backend for the GrowUp Investments application.
 
 ## Run locally
 
@@ -38,7 +38,7 @@ Steps:
    - `DATABASE_URL`
    - `BREVO_API_KEY` (Brevo API v3 key; keep it secret)
    - `EMAIL_FROM`
-   - `EMAIL_FROM_NAME` (optional; defaults to `GrowUP Investments`)
+   - `EMAIL_FROM_NAME` (optional; defaults to `GrowUp Investments`)
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `ADMIN_CREATION_KEY` (optional)
@@ -58,7 +58,7 @@ OTP emails use Brevo's HTTPS API at `https://api.brevo.com/v3/smtp/email`, so SM
 - No Render persistent disk is needed. Keep the GitHub repository public so recipients can download without signing in.
 - The admin portal's **App Download** page links to GitHub's release creation page and reports whether the latest APK asset is available.
 - The admin UI path defaults to `/overgearred/admin`; set `ADMIN_PANEL_PATH` in Render only if you need a different path. This non-obvious path reduces casual discovery but is not a substitute for admin authentication and strong credentials.
-- The app signup screen handles `upwardinvestments://signup?ref=REFERRAL_CODE` to prefill the referral code when the app is installed. If the recipient installs after opening the referral link, they can return to it and tap **Open app** or enter the displayed code manually.
+- The app signup screen handles `growupinvestments://signup?ref=REFERRAL_CODE` to prefill the referral code when the app is installed. If the recipient installs after opening the referral link, they can return to it and tap **Open app** or enter the displayed code manually.
 
 ## Auto-push backend changes to GitHub
 

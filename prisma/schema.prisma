@@ -31,6 +31,7 @@ model User {
   BankAccount        BankAccount[]
   sessions           Session[]
   transactions       Transaction[]
+  scratchCards       ScratchCard[]
   referredBy         User?         @relation("ReferredUsers", fields: [referredById], references: [id])
   referrals          User[]        @relation("ReferredUsers")
 }
@@ -102,6 +103,7 @@ model Transaction {
   BankAccount           BankAccount?        @relation(fields: [bankAccountId], references: [id])
   user                  User                @relation(fields: [userId], references: [id])
   investmentEarnings    InvestmentEarning[]
+  scratchCard           ScratchCard?
 
   @@index([bankAccountId], map: "Transaction_bankAccountId_fkey")
   @@index([userId], map: "Transaction_userId_fkey")
@@ -121,6 +123,19 @@ model InvestmentEarning {
   @@index([investmentId])
   @@index([creditedAt])
   @@unique([investmentId, creditedAt])
+}
+
+model ScratchCard {
+  id                      String      @id
+  userId                  String
+  investmentTransactionId String      @unique
+  rewardAmount            Int
+  scratchedAt             DateTime?
+  createdAt               DateTime    @default(now())
+  user                    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investment              Transaction @relation(fields: [investmentTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Holiday {

@@ -26,9 +26,9 @@ const { getAllowedPlanAmounts } = require('./utils/investmentPlanAvailability');
 const {
   normalizeReferralCode,
   generateReferralCodeForUser,
-  awardReferralSignupBonusForReferrer,
   awardReferralBonusForReferrer,
 } = require('./services/referralProgram');
+const { generateScratchCardReward } = require('./services/scratchCardRewards');
 const cron = require('node-cron');
 
 const REDIS_URL = process.env.REDIS_URL || process.env.REDIS || null;
@@ -1817,21 +1817,8 @@ app.post('/api/register', async (req, res) => {
 
   await prisma.oTP.deleteMany({ where: { email, purpose: 'signup' } });
 
-  // If linked to a referrer, pay the signup bonus and increment their referral count.
+  // Referral rewards are paid only after this user completes a successful investment.
   if (referrerId) {
-    try {
-      const signupBonusAward = await awardReferralSignupBonusForReferrer({ prisma, userId: user.id });
-      if (signupBonusAward?.awarded) {
-        console.log('[referral] signup bonus awarded', {
-          referrerId,
-          referredUserId: user.id,
-          bonus: signupBonusAward.bonus,
-        });
-      }
-    } catch (err) {
-      console.warn('[referral] failed to award signup bonus', err?.message || err);
-    }
-
     try {
       await prisma.user.update({
         where: { id: referrerId },
@@ -2417,6 +2404,15 @@ app.post('/api/portfolio/purchase', async (req, res) => {
         },
       });
 
+      await tx.scratchCard.create({
+        data: {
+          id: createId(),
+          userId: session.userId,
+          investmentTransactionId: created.id,
+          rewardAmount: generateScratchCardReward(numericAmount),
+        },
+      });
+
       const updatedUser = await tx.user.findUnique({ where: { id: session.userId } });
       return { updatedUser, transaction: created };
     });
@@ -2459,6 +2455,106 @@ app.post('/api/portfolio/purchase', async (req, res) => {
     }
     console.error('[purchase] unexpected error in transaction', err);
     return res.status(500).json({ error: 'Unable to complete purchase at this time' });
+  }
+});
+
+app.get('/api/rewards/scratch-cards', async (req, res) => {
+  const session = await getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'Missing auth token' });
+
+  try {
+    const cards = await prisma.scratchCard.findMany({
+      where: { userId: session.userId },
+      include: {
+        investment: {
+          select: { amount: true, investmentName: true, createdAt: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({
+      cards: cards.map((card) => ({
+        id: card.id,
+        investmentAmount: card.investment.amount,
+        investmentName: card.investment.investmentName,
+        createdAt: card.createdAt,
+        scratchedAt: card.scratchedAt,
+        rewardAmount: card.scratchedAt ? card.rewardAmount : null,
+      })),
+    });
+  } catch (error) {
+    console.error('[scratch-cards] failed to load cards', error?.message || error);
+    return res.status(500).json({ error: 'Unable to load scratch cards' });
+  }
+});
+
+app.post('/api/rewards/scratch-cards/:id/scratch', async (req, res) => {
+  const session = await getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'Missing auth token' });
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const card = await tx.scratchCard.findFirst({
+        where: { id: req.params.id, userId: session.userId },
+      });
+      if (!card) {
+        const error = new Error('Scratch card not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (card.scratchedAt) {
+        const user = await tx.user.findUnique({ where: { id: session.userId }, select: { balance: true } });
+        return { rewardAmount: card.rewardAmount, balance: user?.balance ?? 0, alreadyScratched: true };
+      }
+
+      const scratchedAt = new Date();
+      const claim = await tx.scratchCard.updateMany({
+        where: { id: card.id, userId: session.userId, scratchedAt: null },
+        data: { scratchedAt },
+      });
+      if (claim.count !== 1) {
+        const latest = await tx.scratchCard.findUnique({ where: { id: card.id } });
+        const user = await tx.user.findUnique({ where: { id: session.userId }, select: { balance: true } });
+        return { rewardAmount: latest?.rewardAmount || 0, balance: user?.balance ?? 0, alreadyScratched: true };
+      }
+
+      const user = await tx.user.update({
+        where: { id: session.userId },
+        data: { balance: { increment: card.rewardAmount } },
+        select: { balance: true },
+      });
+
+      await tx.transaction.create({
+        data: {
+          id: createId(),
+          type: 'bonus',
+          amount: card.rewardAmount,
+          status: 'completed',
+          description: 'Scratch card reward',
+          transactionId: `SCRATCH-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+          userId: session.userId,
+          investmentName: 'Scratch Card Reward',
+          referenceTxnId: card.investmentTransactionId,
+          completedAt: scratchedAt,
+        },
+      });
+
+      return { rewardAmount: card.rewardAmount, balance: user.balance, alreadyScratched: false };
+    });
+
+    await Promise.all([
+      cacheDel(profileCacheKey(session.userId)),
+      cacheDel(walletBalanceCacheKey(session.userId)),
+      cacheDel(walletTransactionsCacheKey(session.userId)),
+    ]).catch(() => {});
+
+    return res.json(result);
+  } catch (error) {
+    if (error?.statusCode === 404) return res.status(404).json({ error: error.message });
+    console.error('[scratch-cards] failed to scratch card', error?.message || error);
+    return res.status(500).json({ error: 'Unable to credit scratch card reward' });
   }
 });
 
