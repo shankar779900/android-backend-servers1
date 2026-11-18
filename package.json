@@ -4,7 +4,7 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "npx prisma migrate deploy --schema prisma/schema.prisma && node server.js",
     "dev": "node server.js",
     "auto-push": "node ./scripts/auto_push_backend.js"
   },

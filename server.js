@@ -1629,7 +1629,7 @@ app.post('/api/2fa/verify', async (req, res) => {
   }
 
   const token = createToken();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 *  60 * 1000);
 
   await prisma.session.create({
     data: {
@@ -2484,7 +2484,11 @@ app.get('/api/rewards/scratch-cards', async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error('[scratch-cards] failed to load cards', error?.message || error);
+    console.error('[scratch-cards] failed to load cards', {
+      code: error?.code || null,
+      message: error?.message || null,
+      meta: error?.meta || null,
+    });
     return res.status(500).json({ error: 'Unable to load scratch cards' });
   }
 });
