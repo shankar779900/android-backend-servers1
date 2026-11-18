@@ -1629,7 +1629,7 @@ app.post('/api/2fa/verify', async (req, res) => {
   }
 
   const token = createToken();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 *  60 * 1000);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   await prisma.session.create({
     data: {
