@@ -3,10 +3,11 @@ const crypto = require('crypto');
 function getScratchCardRewardRange(investmentAmount) {
   const amount = Number(investmentAmount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
-  if (amount < 5000) return { min: 1, max: 100 };
-  if (amount <= 20000) return { min: 100, max: 300 };
-  if (amount <= 100000) return { min: 300, max: 500 };
-  return { min: 500, max: 1000 };
+  if (amount < 5000) return { min: 1, max: 50 };
+  if (amount <= 20000) return { min: 50, max: 200 };
+  if (amount < 50000) return { min: 200, max: 500 };
+  if (amount <= 100000) return { min: 500, max: 800 };
+  return { min: 700, max: 1000 };
 }
 
 function generateScratchCardReward(investmentAmount) {

@@ -3,20 +3,23 @@ const assert = require('node:assert/strict');
 const { getScratchCardRewardRange, generateScratchCardReward } = require('../services/scratchCardRewards');
 
 test('scratch-card reward ranges follow the investment tiers', () => {
-  assert.deepEqual(getScratchCardRewardRange(4999), { min: 1, max: 100 });
-  assert.deepEqual(getScratchCardRewardRange(5000), { min: 100, max: 300 });
-  assert.deepEqual(getScratchCardRewardRange(20000), { min: 100, max: 300 });
-  assert.deepEqual(getScratchCardRewardRange(20001), { min: 300, max: 500 });
-  assert.deepEqual(getScratchCardRewardRange(100000), { min: 300, max: 500 });
-  assert.deepEqual(getScratchCardRewardRange(100001), { min: 500, max: 1000 });
+  assert.deepEqual(getScratchCardRewardRange(4999), { min: 1, max: 50 });
+  assert.deepEqual(getScratchCardRewardRange(5000), { min: 50, max: 200 });
+  assert.deepEqual(getScratchCardRewardRange(20000), { min: 50, max: 200 });
+  assert.deepEqual(getScratchCardRewardRange(20001), { min: 200, max: 500 });
+  assert.deepEqual(getScratchCardRewardRange(49999), { min: 200, max: 500 });
+  assert.deepEqual(getScratchCardRewardRange(50000), { min: 500, max: 800 });
+  assert.deepEqual(getScratchCardRewardRange(100000), { min: 500, max: 800 });
+  assert.deepEqual(getScratchCardRewardRange(100001), { min: 700, max: 1000 });
 });
 
 test('scratch-card amounts are random integer values within the assigned tier', () => {
   for (const [investmentAmount, min, max] of [
-    [1000, 1, 100],
-    [5000, 100, 300],
-    [25000, 300, 500],
-    [150000, 500, 1000],
+    [1000, 1, 50],
+    [5000, 50, 200],
+    [25000, 200, 500],
+    [50000, 500, 800],
+    [150000, 700, 1000],
   ]) {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const reward = generateScratchCardReward(investmentAmount);
