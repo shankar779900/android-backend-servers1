@@ -187,7 +187,20 @@ export default function InvestmentScreen() {
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.heading}>Portfolio</Text>
+      <View style={styles.pageHeader}>
+        <Text style={styles.heading}>Portfolio</Text>
+        <Pressable
+          onPress={() => navigation.navigate('Rewards')}
+          style={({ pressed }) => [styles.rewardsButton, pressed && styles.rewardsButtonPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Open rewards"
+        >
+          <View style={styles.rewardsIconCircle}>
+            <MaterialCommunityIcons name="gift" size={20} color="#94a3b8" />
+          </View>
+          <Text style={styles.rewardsLabel}>Rewards</Text>
+        </Pressable>
+      </View>
       {isSyncing ? <Text style={styles.syncingText}>Syncing…</Text> : null}
 
       <View style={styles.portfolioSummaryCard}>
@@ -398,6 +411,11 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     marginBottom: 8,
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   subheading: {
     color: '#cbd5e1',
@@ -930,5 +948,35 @@ const styles = StyleSheet.create({
   claimButtonDisabled: {
     backgroundColor: '#334155',
     color: '#94a3b8',
+  },
+  rewardsButton: {
+    width: 76,
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardsButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
+  },
+  rewardsIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#dbe6f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardsLabel: {
+    position: 'absolute',
+    bottom: -3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
+    backgroundColor: '#f6cbea',
+    color: '#ec4899',
+    fontSize: 13,
+    fontWeight: '900',
+    overflow: 'hidden',
   },
 });

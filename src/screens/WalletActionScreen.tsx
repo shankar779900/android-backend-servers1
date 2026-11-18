@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
@@ -552,6 +553,14 @@ export default function WalletActionScreen() {
   const filteredTransactions = Array.isArray(transactions)
     ? transactions.filter((item) => ['deposit', 'withdraw', 'investment', 'earning', 'bonus'].includes(item.type))
     : [];
+  const copyPaymentDetail = async (label: string, value: string) => {
+    try {
+      await Clipboard.setStringAsync(value);
+      showSuccess(`${label} copied.`);
+    } catch (error: any) {
+      showError(getErrorMessage(error, `Unable to copy ${label.toLowerCase()}.`));
+    }
+  };
 
 
   return (
@@ -598,12 +607,18 @@ export default function WalletActionScreen() {
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>Account holder</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.upiAccountHolder}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('Account holder', depositSettings.upiAccountHolder!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {depositSettings.upiId ? (
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>UPI ID</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.upiId}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('UPI ID', depositSettings.upiId!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {qrCodeImageUri && !qrImageError ? (
@@ -631,30 +646,45 @@ export default function WalletActionScreen() {
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>Account holder</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.bankAccountHolder}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('Account holder', depositSettings.bankAccountHolder!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {depositSettings.bankAccountNumber ? (
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>Account number</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.bankAccountNumber}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('Account number', depositSettings.bankAccountNumber!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {depositSettings.bankIfsc ? (
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>IFSC</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.bankIfsc}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('IFSC', depositSettings.bankIfsc!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {depositSettings.bankName ? (
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>Bank</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.bankName}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('Bank name', depositSettings.bankName!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                     {depositSettings.bankBranch ? (
                       <View style={styles.depositDetailRow}>
                         <Text style={styles.depositDetailLabel}>Branch</Text>
                         <Text style={styles.depositDetailValue}>{depositSettings.bankBranch}</Text>
+                        <Pressable style={styles.copyPaymentButton} onPress={() => copyPaymentDetail('Branch', depositSettings.bankBranch!)}>
+                          <Text style={styles.copyPaymentText}>Copy</Text>
+                        </Pressable>
                       </View>
                     ) : null}
                   </View>
@@ -1240,6 +1270,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
     textAlign: 'right',
+  },
+  copyPaymentButton: {
+    marginLeft: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#475569',
+  },
+  copyPaymentText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
   },
   depositInstructions: {
     color: '#cbd5e1',

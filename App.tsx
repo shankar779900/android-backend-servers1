@@ -19,6 +19,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ReferralScreen from './src/screens/ReferralScreen';
 import SupportScreen from './src/screens/SupportScreen';
 import InvestmentScreen from './src/screens/InvestmentScreen';
+import RewardsScreen from './src/screens/RewardsScreen';
 import TwoFactorSetupScreen from './src/screens/TwoFactorSetupScreen';
 import UnlockScreen from './src/screens/UnlockScreen';
 
@@ -188,6 +189,7 @@ function AppNavigation() {
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="WalletAction" component={WalletActionScreen} />
             <Stack.Screen name="Referral" component={ReferralScreen} />
+            <Stack.Screen name="Rewards" component={RewardsScreen} />
             <Stack.Screen name="Support" component={SupportScreen} />
             <Stack.Screen name="TwoFactorSetup" component={TwoFactorSetupScreen} />
           </>

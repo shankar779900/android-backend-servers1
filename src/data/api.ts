@@ -123,6 +123,10 @@ export async function deleteBankAccount(accountId: string) {
 }
 export async function fetchUserProfile() { return request('/api/profile'); }
 export async function fetchPortfolio() { return request('/api/portfolio'); }
+export async function fetchScratchCards() { return request('/api/rewards/scratch-cards'); }
+export async function scratchScratchCard(cardId: string) {
+  return request(`/api/rewards/scratch-cards/${encodeURIComponent(cardId)}/scratch`, { method: 'POST' });
+}
 export async function purchasePlan(payload: any) {
   return request('/api/portfolio/purchase', { method: 'POST', body: JSON.stringify(payload) });
 }

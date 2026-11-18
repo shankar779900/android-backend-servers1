@@ -82,7 +82,7 @@ export default function ReferralScreen() {
           </View>
           <View style={styles.noteRow}>
             <Text style={styles.noteText}>
-              Share your referral code with a friend. If they sign up successfully, you receive ₹100. If they later buy a qualifying plan, you also receive the purchase bonus based on the plan value.
+              Share your referral code with a friend. A referral reward is paid once, after their first successful investment. The reward amount depends on that first investment.
             </Text>
           </View>
           <View style={styles.shareButton}>
@@ -101,19 +101,19 @@ export default function ReferralScreen() {
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>You receive ₹100 as a signup bonus after successful registration.</Text>
+            <Text style={styles.ruleText}>Only your friend's first successful investment qualifies for a referral reward.</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>For purchase bonus: ₹5,000 to ₹20,000 gives ₹400 extra; above ₹20,000 gives ₹900 extra.</Text>
+            <Text style={styles.ruleText}>If their first investment is ₹5,000–₹20,000, the total reward is ₹500; above ₹20,000, it is ₹1,000.</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>Total referral payout is ₹500 for ₹5k–₹20k plans and ₹1,000 for plans above ₹20k.</Text>
+            <Text style={styles.ruleText}>A first investment below ₹5,000 earns ₹100. Later investments do not earn additional referral rewards.</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>Bonuses are credited after the purchase is confirmed by admin.</Text>
+            <Text style={styles.ruleText}>Referral rewards are credited after the investment is successfully completed.</Text>
           </View>
         </SectionCard>
         <View style={styles.bottomButtonRow}>
