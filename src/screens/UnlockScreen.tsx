@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { Modal, Pressable, StyleSheet } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 interface UnlockScreenProps {
@@ -6,34 +7,44 @@ interface UnlockScreenProps {
 }
 
 export default function UnlockScreen({ onUnlock }: UnlockScreenProps) {
+  const onUnlockRef = useRef(onUnlock);
+  const authenticationInProgressRef = useRef(false);
+  onUnlockRef.current = onUnlock;
+
+  const authenticate = useCallback(async () => {
+    if (authenticationInProgressRef.current) return;
+    authenticationInProgressRef.current = true;
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to continue',
+        disableDeviceFallback: false,
+      });
+      if (result.success) onUnlockRef.current();
+    } catch (error) {
+      console.error('[UnlockScreen] Authentication failed', error);
+    } finally {
+      authenticationInProgressRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
-    const initialize = async () => {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      const supported = hasHardware && enrolled;
+    void authenticate();
+  }, [authenticate]);
 
-      if (!supported) {
-        // If device doesn't support biometrics, allow access (no visible UI).
-        onUnlock();
-        return;
-      }
-
-      try {
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Unlock app',
-          disableDeviceFallback: false,
-        });
-
-        if (result.success) {
-          onUnlock();
-        }
-      } catch (err) {
-        // Do nothing; keep the screen locked if authentication fails.
-      }
-    };
-
-    void initialize();
-  }, [onUnlock]);
-
-  return null;
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      onRequestClose={() => undefined}
+      statusBarTranslucent
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Authenticate to continue"
+        onPress={() => void authenticate()}
+        style={StyleSheet.absoluteFill}
+      />
+    </Modal>
+  );
 }
