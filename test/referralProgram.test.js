@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const {
   normalizeReferralCode,
   generateReferralCodeForUser,
-  calculateReferralBonus,
-  calculateReferralPurchaseBonus,
+  getReferralRewardRange,
+  generateReferralBonus,
   awardReferralBonusForReferrer,
 } = require('../services/referralProgram');
 
@@ -81,36 +81,50 @@ test('generateReferralCodeForUser creates a stable uppercase format', () => {
   assert.equal(code.slice(-6), '123456');
 });
 
-test('calculateReferralBonus includes the deferred signup reward after investment', () => {
-  assert.equal(calculateReferralBonus(5000), 500);
-  assert.equal(calculateReferralBonus(20000), 500);
-  assert.equal(calculateReferralBonus(20001), 1000);
-  assert.equal(calculateReferralBonus(4999), 100);
-  assert.equal(calculateReferralBonus(0), 0);
+test('referral scratch-card ranges match the referred user’s first investment', () => {
+  assert.deepEqual(getReferralRewardRange(4999), { min: 100, max: 150 });
+  assert.deepEqual(getReferralRewardRange(5000), { min: 200, max: 300 });
+  assert.deepEqual(getReferralRewardRange(20000), { min: 200, max: 300 });
+  assert.deepEqual(getReferralRewardRange(20001), { min: 350, max: 500 });
+  assert.deepEqual(getReferralRewardRange(50000), { min: 350, max: 500 });
+  assert.deepEqual(getReferralRewardRange(50001), { min: 600, max: 800 });
+  assert.deepEqual(getReferralRewardRange(100000), { min: 600, max: 800 });
+  assert.deepEqual(getReferralRewardRange(100001), { min: 850, max: 1000 });
+  assert.equal(getReferralRewardRange(0), null);
 });
 
-test('calculateReferralPurchaseBonus matches the purchase-tier reward without the signup bonus', () => {
-  assert.equal(calculateReferralPurchaseBonus(5000), 400);
-  assert.equal(calculateReferralPurchaseBonus(20000), 400);
-  assert.equal(calculateReferralPurchaseBonus(20001), 900);
-  assert.equal(calculateReferralPurchaseBonus(4999), 0);
+test('referral scratch-card rewards are random integers within the selected total range', () => {
+  for (const [investmentAmount, min, max] of [
+    [1000, 100, 150],
+    [5000, 200, 300],
+    [25000, 350, 500],
+    [75000, 600, 800],
+    [150000, 850, 1000],
+  ]) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const reward = generateReferralBonus(investmentAmount);
+      assert.equal(Number.isInteger(reward), true);
+      assert.ok(reward >= min && reward <= max);
+    }
+  }
+  assert.equal(generateReferralBonus(0), 0);
 });
 
-test('first successful investment awards the deferred signup bonus and eligible purchase bonus as a scratch card', async () => {
+test('first successful investment awards a scratch card within the total referral reward range', async () => {
   const { prisma, created, scratchCards, referredUser, referrer } = createReferralPrisma();
   const result = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 5000 });
 
   assert.equal(result.awarded, true);
-  assert.equal(result.bonus, 500);
+  assert.ok(result.bonus >= 200 && result.bonus <= 300);
   assert.equal(created.length, 1);
-  assert.equal(created[0].amount, 500);
+  assert.equal(created[0].amount, result.bonus);
   assert.equal(created[0].type, 'bonus');
   assert.equal(created[0].status, 'pending');
   assert.equal(created[0].description, 'Referral bonus scratch card');
   assert.equal(scratchCards.length, 1);
-  assert.equal(scratchCards[0].rewardAmount, 500);
+  assert.equal(scratchCards[0].rewardAmount, result.bonus);
   assert.equal(referrer.balance, 0);
-  assert.equal(referrer.referralBonusEarned, 500);
+  assert.equal(referrer.referralBonusEarned, result.bonus);
   assert.equal(referredUser.referralSignupBonusPaid, true);
   assert.equal(referredUser.referralPurchaseBonusPaid, true);
 });
@@ -120,43 +134,43 @@ test('only the first successful investment can earn a referral reward', async ()
   const first = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 1000 });
   const second = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 5000 });
 
-  assert.equal(first.bonus, 100);
+  assert.ok(first.bonus >= 100 && first.bonus <= 150);
   assert.equal(second.awarded, false);
   assert.equal(second.bonus, 0);
   assert.equal(created.length, 1);
   assert.equal(scratchCards.length, 1);
   assert.equal(referrer.balance, 0);
-  assert.equal(referrer.referralBonusEarned, 100);
+  assert.equal(referrer.referralBonusEarned, first.bonus);
   assert.equal(referredUser.referralSignupBonusPaid, true);
   assert.equal(referredUser.referralPurchaseBonusPaid, true);
 });
 
-test('a first investment below the qualifying tier prevents later referral payouts for legacy signup rewards', async () => {
+test('a prior signup reward is counted toward the total low-tier referral range', async () => {
   const { prisma, created, referredUser } = createReferralPrisma({ signupBonusPaid: true });
   const first = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 1000 });
   const second = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 5000 });
 
-  assert.equal(first.awarded, false);
-  assert.equal(first.bonus, 0);
+  assert.ok(first.bonus >= 0 && first.bonus <= 50);
+  assert.equal(first.awarded, first.bonus > 0);
   assert.equal(second.awarded, false);
-  assert.equal(created.length, 0);
+  assert.equal(created.length, first.bonus > 0 ? 1 : 0);
   assert.equal(referredUser.referralPurchaseBonusPaid, true);
 });
 
-test('a prior signup payout is not repeated when the referred user invests', async () => {
+test('a prior signup reward is deducted from the next referral card total', async () => {
   const { prisma, created, scratchCards, referredUser, referrer } = createReferralPrisma({ signupBonusPaid: true });
   const result = await awardReferralBonusForReferrer({ prisma, userId: 'user-b', purchaseAmount: 5000 });
 
   assert.equal(result.awarded, true);
-  assert.equal(result.bonus, 400);
+  assert.ok(result.bonus >= 100 && result.bonus <= 200);
   assert.equal(created.length, 1);
   assert.equal(created[0].type, 'bonus');
-  assert.equal(created[0].amount, 400);
+  assert.equal(created[0].amount, result.bonus);
   assert.equal(created[0].status, 'pending');
   assert.equal(scratchCards.length, 1);
-  assert.equal(scratchCards[0].rewardAmount, 400);
+  assert.equal(scratchCards[0].rewardAmount, result.bonus);
   assert.equal(referrer.balance, 0);
-  assert.equal(referrer.referralBonusEarned, 400);
+  assert.equal(referrer.referralBonusEarned, result.bonus);
   assert.equal(referredUser.referralSignupBonusPaid, true);
   assert.equal(referredUser.referralPurchaseBonusPaid, true);
 });

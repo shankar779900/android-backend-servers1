@@ -1,10 +1,6 @@
 const crypto = require('crypto');
 
 const REFERRAL_SIGNUP_BONUS = 100;
-const REFERRAL_BONUS_RANGE_LOW = 500;
-const REFERRAL_BONUS_RANGE_HIGH = 1000;
-const REFERRAL_PURCHASE_BONUS_LOW = 400;
-const REFERRAL_PURCHASE_BONUS_HIGH = 900;
 
 function createId() {
   return crypto.randomBytes(16).toString('hex');
@@ -27,20 +23,26 @@ function generateReferralCodeForUser(username, seed = Date.now()) {
   return `${namePart}${numericSeed}`;
 }
 
-function calculateReferralPurchaseBonus(amount) {
+function getReferralRewardRange(amount) {
   const numericAmount = Number(amount || 0);
-  if (!Number.isFinite(numericAmount) || numericAmount <= 0) return 0;
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) return null;
 
-  if (numericAmount >= 5000 && numericAmount <= 20000) return REFERRAL_PURCHASE_BONUS_LOW;
-  if (numericAmount > 20000) return REFERRAL_PURCHASE_BONUS_HIGH;
-  return 0;
+  if (numericAmount < 5000) return { min: 100, max: 150 };
+  if (numericAmount <= 20000) return { min: 200, max: 300 };
+  if (numericAmount <= 50000) return { min: 350, max: 500 };
+  if (numericAmount <= 100000) return { min: 600, max: 800 };
+  return { min: 850, max: 1000 };
 }
 
-function calculateReferralBonus(amount) {
-  const numericAmount = Number(amount || 0);
-  if (!Number.isFinite(numericAmount) || numericAmount <= 0) return 0;
+function generateReferralBonus(amount, signupBonusAlreadyPaid = false) {
+  const range = getReferralRewardRange(amount);
+  if (!range) return 0;
 
-  return REFERRAL_SIGNUP_BONUS + calculateReferralPurchaseBonus(numericAmount);
+  const priorSignupBonus = signupBonusAlreadyPaid ? REFERRAL_SIGNUP_BONUS : 0;
+  const min = Math.max(0, range.min - priorSignupBonus);
+  const max = range.max - priorSignupBonus;
+  if (max <= 0) return 0;
+  return crypto.randomInt(min, max + 1);
 }
 
 async function awardReferralBonusForReferrer({ prisma, userId, purchaseAmount }) {
@@ -65,9 +67,10 @@ async function awardReferralBonusForReferrer({ prisma, userId, purchaseAmount })
       return { awarded: false, bonus: 0 };
     }
 
-    const signupBonus = referredUser.referralSignupBonusPaid ? 0 : REFERRAL_SIGNUP_BONUS;
-    const purchaseBonus = calculateReferralPurchaseBonus(purchaseAmount);
-    const bonus = signupBonus + purchaseBonus;
+    const bonus = generateReferralBonus(
+      purchaseAmount,
+      referredUser.referralSignupBonusPaid,
+    );
 
     const referrer = await tx.user.findUnique({
       where: { id: referredUser.referredById },
@@ -128,14 +131,9 @@ async function awardReferralBonusForReferrer({ prisma, userId, purchaseAmount })
 }
 
 module.exports = {
-  REFERRAL_SIGNUP_BONUS,
-  REFERRAL_BONUS_RANGE_LOW,
-  REFERRAL_BONUS_RANGE_HIGH,
-  REFERRAL_PURCHASE_BONUS_LOW,
-  REFERRAL_PURCHASE_BONUS_HIGH,
   normalizeReferralCode,
   generateReferralCodeForUser,
-  calculateReferralPurchaseBonus,
-  calculateReferralBonus,
+  getReferralRewardRange,
+  generateReferralBonus,
   awardReferralBonusForReferrer,
 };

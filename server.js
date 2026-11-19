@@ -2481,7 +2481,7 @@ app.get('/api/rewards/scratch-cards', async (req, res) => {
           userId: session.userId,
           type: 'bonus',
           status: 'completed',
-          description: 'Scratch Card Reward',
+          investmentName: 'Scratch Card Reward',
         },
         select: { amount: true, referenceTxnId: true },
       }),
