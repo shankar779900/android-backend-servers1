@@ -1,6 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getScratchCardRewardRange, generateScratchCardReward } = require('../services/scratchCardRewards');
+const {
+  getScratchCardRewardRange,
+  generateScratchCardReward,
+  calculateTotalScratchRewards,
+} = require('../services/scratchCardRewards');
 
 test('scratch-card reward ranges follow the investment tiers', () => {
   assert.deepEqual(getScratchCardRewardRange(4999), { min: 1, max: 50 });
@@ -28,4 +32,20 @@ test('scratch-card amounts are random integer values within the assigned tier', 
     }
   }
   assert.equal(generateScratchCardReward(0), null);
+});
+
+test('total scratch rewards persist from credited transactions and include legacy scratched cards once', () => {
+  const total = calculateTotalScratchRewards(
+    [
+      { investmentTransactionId: 'investment-1', scratchedAt: new Date(), rewardAmount: 100 },
+      { investmentTransactionId: 'investment-2', scratchedAt: new Date(), rewardAmount: 75 },
+      { investmentTransactionId: 'investment-3', scratchedAt: null, rewardAmount: 50 },
+    ],
+    [
+      { referenceTxnId: 'investment-1', amount: 100 },
+      { referenceTxnId: 'deleted-investment', amount: 25 },
+    ],
+  );
+
+  assert.equal(total, 200);
 });

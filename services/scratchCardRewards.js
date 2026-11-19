@@ -16,7 +16,27 @@ function generateScratchCardReward(investmentAmount) {
   return crypto.randomInt(range.min, range.max + 1);
 }
 
+function calculateTotalScratchRewards(cards, rewardTransactions) {
+  const creditedInvestmentIds = new Set(
+    rewardTransactions
+      .map((transaction) => transaction.referenceTxnId)
+      .filter(Boolean),
+  );
+  const creditedTransactionTotal = rewardTransactions.reduce(
+    (total, transaction) => total + Number(transaction.amount || 0),
+    0,
+  );
+  const legacyCardTotal = cards.reduce((total, card) => (
+    card.scratchedAt && !creditedInvestmentIds.has(card.investmentTransactionId)
+      ? total + Number(card.rewardAmount || 0)
+      : total
+  ), 0);
+
+  return creditedTransactionTotal + legacyCardTotal;
+}
+
 module.exports = {
   getScratchCardRewardRange,
   generateScratchCardReward,
+  calculateTotalScratchRewards,
 };

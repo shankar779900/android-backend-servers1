@@ -28,7 +28,10 @@ const {
   generateReferralCodeForUser,
   awardReferralBonusForReferrer,
 } = require('./services/referralProgram');
-const { generateScratchCardReward } = require('./services/scratchCardRewards');
+const {
+  generateScratchCardReward,
+  calculateTotalScratchRewards,
+} = require('./services/scratchCardRewards');
 const cron = require('node-cron');
 
 const REDIS_URL = process.env.REDIS_URL || process.env.REDIS || null;
@@ -2463,15 +2466,30 @@ app.get('/api/rewards/scratch-cards', async (req, res) => {
   if (!session) return res.status(401).json({ error: 'Missing auth token' });
 
   try {
-    const cards = await prisma.scratchCard.findMany({
-      where: { userId: session.userId },
-      include: {
-        investment: {
-          select: { amount: true, investmentName: true, createdAt: true },
+    const [cards, rewardTransactions, user] = await Promise.all([
+      prisma.scratchCard.findMany({
+        where: { userId: session.userId },
+        include: {
+          investment: {
+            select: { amount: true, investmentName: true, createdAt: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          userId: session.userId,
+          type: 'bonus',
+          status: 'completed',
+          description: 'Scratch Card Reward',
+        },
+        select: { amount: true, referenceTxnId: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { balance: true },
+      }),
+    ]);
 
     return res.json({
       cards: cards.map((card) => ({
@@ -2482,6 +2500,8 @@ app.get('/api/rewards/scratch-cards', async (req, res) => {
         scratchedAt: card.scratchedAt,
         rewardAmount: card.scratchedAt ? card.rewardAmount : null,
       })),
+      totalEarned: calculateTotalScratchRewards(cards, rewardTransactions),
+      balance: user?.balance ?? 0,
     });
   } catch (error) {
     console.error('[scratch-cards] failed to load cards', {
