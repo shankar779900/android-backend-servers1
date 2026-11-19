@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
-import { Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Svg, { Defs, Mask, Path, Rect } from 'react-native-svg';
+import { Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { fetchScratchCards, scratchScratchCard } from '../data/api';
+import Svg, { Defs, Mask, Rect, Image as SvgImage, Path } from 'react-native-svg';
 
 type ScratchCard = {
   id: string;
@@ -20,36 +21,47 @@ function formatCurrency(value: number) {
   return `₹${Number(value || 0).toLocaleString('en-IN')}`;
 }
 
+const ALL_IN_ONE_REVEAL_CARD = require('../../assets/assets/assets/assets/all-in-one-revealcard.jpg');
+
 const SCRATCH_ASSETS = {
   below5000: {
-    cover: require('../../assets/assets/scratch-cover-below-5000.jpeg'),
-    reveal: require('../../assets/assets/assets/scratch-reveal-below-5000.jpeg'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-below-5000.jpg'),
+    minReward: 1,
+    maxReward: 50,
   },
   below20000: {
-    cover: require('../../assets/assets/assets/assets/scratch-cover-below-20000.png'),
-    reveal: require('../../assets/assets/assets/assets/scratch-reveal-below-20000.png'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-below-20000.jpg'),
+    minReward: 51,
+    maxReward: 100,
   },
   below50000: {
-    cover: require('../../assets/assets/assets/assets/assets/assets/scratch-cover-below-50000.png'),
-    reveal: require('../../assets/assets/assets/assets/scratch-reveal-below-50000.png'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-below-50000.jpg'),
+    minReward: 101,
+    maxReward: 200,
   },
   below100000: {
-    cover: require('../../assets/assets/assets/assets/assets/scratch-cover-below-100000.png'),
-    reveal: require('../../assets/assets/assets/assets/assets/scratch-reveal-below-100000.png'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-below-100000.jpg'),
+    minReward: 201,
+    maxReward: 350,
   },
   above100000: {
-    cover: require('../../assets/assets/assets/assets/scratch-cover-above-100000.png'),
-    reveal: require('../../assets/assets/assets/assets/scratch-reveal-above-100000.png'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-above-100000.jpg'),
+    minReward: 351,
+    maxReward: 500,
   },
   referral: {
-    cover: require('../../assets/assets/assets/assets/scratch-cover-refer.png'),
-    reveal: require('../../assets/assets/assets/assets/scratch-reveal-refer.png'),
+    cover: require('../../assets/assets/assets/assets/scratch-cover-refer.jpg'),
   },
 } as const;
 
-function getScratchAssets(card: ScratchCard) {
-  if (String(card.investmentName || '').toLowerCase().includes('referral')) return SCRATCH_ASSETS.referral;
+function isReferralScratchCard(card: ScratchCard) {
+  return String(card.investmentName || '').toLowerCase().includes('referral');
+}
+
+function getScratchTier(card: ScratchCard) {
+  if (isReferralScratchCard(card)) return null;
   const amount = Number(card.investmentAmount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   if (amount < 5000) return SCRATCH_ASSETS.below5000;
   if (amount <= 20000) return SCRATCH_ASSETS.below20000;
   if (amount < 50000) return SCRATCH_ASSETS.below50000;
@@ -57,127 +69,209 @@ function getScratchAssets(card: ScratchCard) {
   return SCRATCH_ASSETS.above100000;
 }
 
-function ScratchCardTile({ card, onScratch }: { card: ScratchCard; onScratch: (id: string) => Promise<boolean> }) {
+function getScratchAssets(card: ScratchCard) {
+  if (isReferralScratchCard(card)) return SCRATCH_ASSETS.referral;
+  return getScratchTier(card) || SCRATCH_ASSETS.below5000;
+}
+
+function ScratchCardTile({ card, onScratch, isActive = false, onOpen }: { card: ScratchCard; onScratch: (id: string) => Promise<boolean>; isActive?: boolean; onOpen?: (card: ScratchCard) => void }) {
   const [scratchPath, setScratchPath] = useState('');
-  const [scratchedCells, setScratchedCells] = useState<string[]>([]);
-  const [scratchWidth, setScratchWidth] = useState(1);
+  const [scratchDistance, setScratchDistance] = useState(0);
+  const [scratchSize, setScratchSize] = useState({ width: 1, height: 1 });
   const widthRef = useRef(1);
+  const heightRef = useRef(1);
+  const scratchAreaRef = useRef<View | null>(null);
+  const areaOriginRef = useRef({ x: 0, y: 0 });
   const scratchPathRef = useRef('');
-  const cellsRef = useRef(new Set<string>());
+  const scratchDistanceRef = useRef(0);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const claimingRef = useRef(false);
   const onScratchRef = useRef(onScratch);
   onScratchRef.current = onScratch;
 
   const addScratchPoint = (x: number, y: number, start = false) => {
     const boundedX = Math.max(0, Math.min(widthRef.current, x));
-    const boundedY = Math.max(0, Math.min(104, y));
+    const boundedY = Math.max(0, Math.min(heightRef.current, y));
     scratchPathRef.current += `${start || !scratchPathRef.current ? 'M' : ' L'}${boundedX} ${boundedY}`;
     setScratchPath(scratchPathRef.current);
 
-    const column = Math.min(5, Math.floor((boundedX / widthRef.current) * 6));
-    const row = Math.min(2, Math.floor((boundedY / 104) * 3));
-    cellsRef.current.add(`${column}-${row}`);
-    setScratchedCells(Array.from(cellsRef.current));
+    if (lastPointRef.current && !start) {
+      const deltaX = boundedX - lastPointRef.current.x;
+      const deltaY = boundedY - lastPointRef.current.y;
+      scratchDistanceRef.current += Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+    lastPointRef.current = { x: boundedX, y: boundedY };
+    setScratchDistance(scratchDistanceRef.current);
 
-    if (cellsRef.current.size >= 8 && !claimingRef.current) {
+    if (scratchDistanceRef.current >= Math.min(widthRef.current, heightRef.current) * 0.75 && !claimingRef.current) {
       claimingRef.current = true;
       void onScratchRef.current(card.id).then((success) => {
         if (success) return;
         claimingRef.current = false;
         scratchPathRef.current = '';
-        cellsRef.current.clear();
+        scratchDistanceRef.current = 0;
+        lastPointRef.current = null;
         setScratchPath('');
-        setScratchedCells([]);
+        setScratchDistance(0);
       });
     }
   };
 
   const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => !card.scratchedAt,
-    onMoveShouldSetPanResponder: () => !card.scratchedAt,
-    onPanResponderGrant: (event) => addScratchPoint(event.nativeEvent.locationX, event.nativeEvent.locationY, true),
-    onPanResponderMove: (event) => addScratchPoint(event.nativeEvent.locationX, event.nativeEvent.locationY),
+    onStartShouldSetPanResponder: () => isActive && !card.scratchedAt,
+    onStartShouldSetPanResponderCapture: () => isActive && !card.scratchedAt,
+    onMoveShouldSetPanResponder: (_event, gesture) => isActive && !card.scratchedAt && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => isActive && !card.scratchedAt && (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2),
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+    onPanResponderGrant: (_event, gesture) => addScratchPoint(
+      gesture.x0 - areaOriginRef.current.x,
+      gesture.y0 - areaOriginRef.current.y,
+      true,
+    ),
+    onPanResponderMove: (_event, gesture) => addScratchPoint(
+      gesture.moveX - areaOriginRef.current.x,
+      gesture.moveY - areaOriginRef.current.y,
+    ),
+    onPanResponderRelease: () => { lastPointRef.current = null; },
+    onPanResponderTerminate: () => { lastPointRef.current = null; },
   })).current;
 
-  const { cover, reveal } = getScratchAssets(card);
+  const scratchProgress = Math.min(scratchDistance / (Math.min(scratchSize.width, scratchSize.height) * 0.75), 1);
+
+  const tier = getScratchTier(card);
+  const { cover } = getScratchAssets(card);
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardTopRow}>
-        <View style={styles.cardIcon}><MaterialCommunityIcons name="ticket-percent-outline" size={22} color="#fbbf24" /></View>
-        <View style={styles.cardDetails}>
-          <Text style={styles.cardTitle}>{card.investmentName || 'Investment reward'}</Text>
-          <Text style={styles.cardMeta}>Invested {formatCurrency(card.investmentAmount)} · {new Date(card.createdAt).toLocaleDateString('en-IN')}</Text>
-        </View>
-        <MaterialCommunityIcons name={card.scratchedAt ? 'check-circle' : 'gift-outline'} size={22} color={card.scratchedAt ? '#34d399' : '#fbbf24'} />
+    <Pressable
+      style={[styles.card, isActive && styles.activeCard]}
+      onPress={() => { if (!isActive) onOpen?.(card); }}
+      disabled={isActive}
+      accessibilityRole="button"
+      accessibilityLabel="Open scratch card"
+    >
+      <View
+        ref={scratchAreaRef}
+        style={[styles.scratchArea, isActive && styles.activeScratchArea]}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          widthRef.current = width;
+          heightRef.current = height;
+          setScratchSize({ width, height });
+          scratchAreaRef.current?.measureInWindow((x, y) => {
+            areaOriginRef.current = { x, y };
+          });
+        }}
+        {...panResponder.panHandlers}
+        accessibilityRole="button"
+        accessibilityLabel="Scratch card"
+        accessibilityHint="Swipe across the card to claim your reward"
+      >
+        <Image
+          source={ALL_IN_ONE_REVEAL_CARD}
+          style={styles.scratchReveal}
+          resizeMode="contain"
+        />
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${scratchSize.width} ${scratchSize.height}`}
+          style={styles.scratchSvg}
+        >
+          <Defs>
+            <Mask id={`scratch-mask-${card.id}`} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
+              <Rect width={scratchSize.width} height={scratchSize.height} fill="white" />
+              <Path
+                d={scratchPath}
+                stroke="black"
+                strokeWidth={Math.max(42, scratchSize.width * 0.14)}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </Mask>
+          </Defs>
+          <SvgImage
+            href={cover}
+            x={0}
+            y={0}
+            width={scratchSize.width}
+            height={scratchSize.height}
+            preserveAspectRatio="none"
+            mask={`url(#scratch-mask-${card.id})`}
+          />
+        </Svg>
       </View>
-
-      {card.scratchedAt ? (
-        <View style={styles.revealedReward}>
-          <Image source={reveal} style={styles.revealImage} resizeMode="contain" />
-          <View style={styles.creditedBadge}>
-            <MaterialCommunityIcons name="wallet-plus-outline" size={20} color="#34d399" />
-            <Text style={styles.rewardCaption}>Credited to wallet</Text>
-            <Text style={styles.rewardAmount}>{formatCurrency(card.rewardAmount || 0)}</Text>
-          </View>
-        </View>
-      ) : (
-        <>
-          <View style={styles.prizePreview}>
-            <Text style={styles.previewLabel}>YOUR REWARD</Text>
-            <Text style={styles.previewAmount}>₹ ? ? ?</Text>
-          </View>
-          <View
-            style={styles.scratchArea}
-            onLayout={(event) => {
-              widthRef.current = event.nativeEvent.layout.width;
-              setScratchWidth(event.nativeEvent.layout.width);
-            }}
-            {...panResponder.panHandlers}
-            accessibilityRole="button"
-            accessibilityLabel="Scratch to reveal your reward"
-          >
-            <Image source={cover} style={styles.scratchCover} resizeMode="cover" />
-            <Svg width="100%" height="104" viewBox={`0 0 ${scratchWidth} 104`} style={styles.scratchSvg}>
-              <Defs>
-                <Mask id={`scratch-mask-${card.id}`} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">
-                  <Rect width="100%" height="104" fill="white" />
-                  <Path d={scratchPath} stroke="black" strokeWidth="34" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </Mask>
-              </Defs>
-              <Rect width="100%" height="104" fill="#94a3b8" mask={`url(#scratch-mask-${card.id})`} />
-              <Path d="M0 25 H500 M0 78 H500" stroke="#cbd5e1" strokeWidth="1" opacity="0.35" pointerEvents="none" />
-            </Svg>
-            <View pointerEvents="none" style={styles.scratchPrompt}>
-              <MaterialCommunityIcons name="gesture-swipe" size={20} color="#0f172a" />
-              <Text style={styles.scratchPromptText}>Scratch to reveal · {Math.min(scratchedCells.length, 8)}/8</Text>
-            </View>
-          </View>
-        </>
-      )}
-    </View>
+      <View style={styles.scratchTierInfo}>
+        {tier ? (
+          <>
+            <Text style={styles.scratchTierInvestment}>Investment: {formatCurrency(card.investmentAmount)}</Text>
+            <Text style={styles.scratchTierReward}>
+              Possible reward: {formatCurrency(tier.minReward)}–{formatCurrency(tier.maxReward)}
+            </Text>
+          </>
+        ) : isReferralScratchCard(card) ? (
+          <Text style={styles.scratchTierReward}>Referral bonus</Text>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }
 
 export default function RewardsScreen() {
   const navigation = useNavigation<any>();
-  const { updateUser } = useAuth();
-  const { showSuccess, showError } = useToast();
+  const { user, updateUser } = useAuth();
+  const { showError } = useToast();
   const [cards, setCards] = useState<ScratchCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [scratchingId, setScratchingId] = useState<string | null>(null);
+  const [claimedCard, setClaimedCard] = useState<ScratchCard | null>(null);
+  const [activeScratchCard, setActiveScratchCard] = useState<ScratchCard | null>(null);
+  const [totalEarned, setTotalEarned] = useState(0);
+  const totalEarnedRef = useRef(0);
+  const totalRewardsCacheKey = `scratchTotalEarned:${user?.email || ''}`;
+  const updateUserRef = useRef(updateUser);
+  const showErrorRef = useRef(showError);
+  const loadingCardsRef = useRef(false);
+  updateUserRef.current = updateUser;
+  showErrorRef.current = showError;
 
   const loadCards = useCallback(async () => {
-    setLoading(true);
+    if (loadingCardsRef.current) return;
+    loadingCardsRef.current = true;
     try {
+      if (totalRewardsCacheKey !== 'scratchTotalEarned:') {
+        const cachedTotal = await AsyncStorage.getItem(totalRewardsCacheKey);
+        if (cachedTotal !== null) {
+          const parsedTotal = Number(cachedTotal);
+          if (Number.isFinite(parsedTotal)) {
+            totalEarnedRef.current = parsedTotal;
+            setTotalEarned(parsedTotal);
+          }
+        }
+      }
       const result = await fetchScratchCards();
-      setCards(Array.isArray(result.cards) ? result.cards : []);
+      const fetchedCards = Array.isArray(result.cards) ? result.cards : [];
+      setCards(fetchedCards.filter((card: ScratchCard) => !card.scratchedAt));
+      const cardHistoryTotal = fetchedCards.reduce((total: number, card: ScratchCard) => (
+        card.scratchedAt ? total + Number(card.rewardAmount || 0) : total
+      ), 0);
+      const freshTotal = typeof result.totalEarned === 'number' && Number.isFinite(result.totalEarned)
+        ? result.totalEarned
+        : cardHistoryTotal;
+      totalEarnedRef.current = freshTotal;
+      setTotalEarned(freshTotal);
+      if (totalRewardsCacheKey !== 'scratchTotalEarned:') {
+        await AsyncStorage.setItem(totalRewardsCacheKey, String(freshTotal));
+      }
+      if (typeof result.balance === 'number') await updateUserRef.current({ balance: result.balance });
     } catch (error: any) {
-      showError(error?.message || 'Unable to load rewards');
+      showErrorRef.current(error?.message || 'Unable to load rewards');
     } finally {
+      loadingCardsRef.current = false;
       setLoading(false);
     }
-  }, [showError]);
+  }, [totalRewardsCacheKey]);
 
   useFocusEffect(useCallback(() => {
     void loadCards();
@@ -188,11 +282,23 @@ export default function RewardsScreen() {
     setScratchingId(cardId);
     try {
       const result = await scratchScratchCard(cardId);
-      setCards((current) => current.map((card) => card.id === cardId
-        ? { ...card, scratchedAt: new Date().toISOString(), rewardAmount: Number(result.rewardAmount || 0) }
-        : card));
+      const rewardAmount = Number(result.rewardAmount || 0);
+      const alreadyScratched = result.alreadyScratched === true;
+      const card = cards.find((item) => item.id === cardId);
+      setCards((current) => current.filter((item) => item.id !== cardId));
+      if (card && !alreadyScratched) {
+        setClaimedCard({ ...card, scratchedAt: new Date().toISOString(), rewardAmount });
+        setActiveScratchCard(null);
+      }
       if (typeof result.balance === 'number') await updateUser({ balance: result.balance });
-      showSuccess(`${formatCurrency(Number(result.rewardAmount || 0))} credited to your wallet.`);
+      if (!alreadyScratched) {
+        totalEarnedRef.current += rewardAmount;
+        setTotalEarned(totalEarnedRef.current);
+        if (totalRewardsCacheKey !== 'scratchTotalEarned:') {
+          void AsyncStorage.setItem(totalRewardsCacheKey, String(totalEarnedRef.current));
+        }
+      }
+      setActiveScratchCard(null);
       return true;
     } catch (error: any) {
       showError(error?.message || 'Unable to scratch this card');
@@ -203,70 +309,186 @@ export default function RewardsScreen() {
     }
   };
 
-  const pendingCount = cards.filter((card) => !card.scratchedAt).length;
+  const pendingCount = cards.length;
 
   return (
+    <>
     <ScrollView style={styles.screen} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backButton} accessibilityLabel="Go back">
-          <MaterialCommunityIcons name="arrow-left" size={24} color="#e2e8f0" />
+          <MaterialCommunityIcons name="arrow-left" size={22} color="#f8fafc" />
         </Pressable>
-        <Text style={styles.heading}>Rewards</Text>
-        <View style={styles.headerSpacer} />
+        <View style={styles.headerText}>
+          <Text style={styles.heading}>Rewards</Text>
+          <Text style={styles.subtitle}>Scratch cards and your reward history</Text>
+        </View>
       </View>
-      <Text style={styles.subtitle}>Scratch a card from your successful investment to reveal your reward. It will be added to your wallet automatically.</Text>
 
-      <View style={styles.listHeader}>
-        <Text style={styles.sectionTitle}>Your scratch cards</Text>
-        <Text style={styles.pendingCount}>{pendingCount} to scratch</Text>
+      <View style={styles.totalRewardsCard}>
+        <View style={styles.totalRewardsIcon}>
+          <MaterialCommunityIcons name="gift-open-outline" size={24} color="#34d399" />
+        </View>
+        <View style={styles.totalRewardsTextWrap}>
+          <Text style={styles.totalRewardsLabel}>TOTAL REWARDS</Text>
+          <Text style={styles.totalRewardsAmount}>{formatCurrency(totalEarned)}</Text>
+        </View>
       </View>
 
       {loading ? <Text style={styles.statusText}>Loading rewards…</Text> : null}
       {!loading && cards.length === 0 ? (
         <View style={styles.emptyCard}>
-          <MaterialCommunityIcons name="gift-outline" size={38} color="#64748b" />
+          <View style={styles.emptyIcon}>
+            <MaterialCommunityIcons name="gift-outline" size={26} color="#34d399" />
+          </View>
           <Text style={styles.emptyTitle}>No scratch cards yet</Text>
-          <Text style={styles.emptyText}>A card will appear here after your first successful investment.</Text>
+          <Text style={styles.emptyText}>New cards appear here after an eligible investment.</Text>
         </View>
       ) : null}
-      {cards.map((card) => <ScratchCardTile key={card.id} card={card} onScratch={handleScratch} />)}
-      {scratchingId ? <Text style={styles.statusText}>Adding your reward to the wallet…</Text> : null}
+      {cards.length > 0 ? (
+        <>
+          <View style={styles.listHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Scratch cards</Text>
+              <Text style={styles.sectionSubtitle}>Tap a card to reveal your reward</Text>
+            </View>
+            <View style={styles.pendingCountBadge}>
+              <Text style={styles.pendingCount}>{pendingCount} available</Text>
+            </View>
+          </View>
+          <View style={styles.cardsGrid}>
+            {cards.map((card) => <ScratchCardTile key={card.id} card={card} onScratch={handleScratch} onOpen={setActiveScratchCard} />)}
+          </View>
+        </>
+      ) : null}
     </ScrollView>
+    <Modal
+      visible={Boolean(activeScratchCard)}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => setActiveScratchCard(null)}
+    >
+      <View style={styles.activeScratchBackdrop}>
+        <View style={styles.activeScratchModal}>
+          <Pressable
+            style={styles.activeScratchClose}
+            onPress={() => setActiveScratchCard(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close scratch card"
+          >
+            <MaterialCommunityIcons name="close" size={22} color="#334155" />
+          </Pressable>
+          {activeScratchCard ? (
+            <ScratchCardTile
+              card={activeScratchCard}
+              onScratch={handleScratch}
+              isActive
+            />
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+    <Modal
+      visible={Boolean(claimedCard)}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => setClaimedCard(null)}
+    >
+      <View style={styles.rewardModalBackdrop}>
+        <View style={styles.rewardModal}>
+          <View style={styles.revealCardWrap}>
+            <Image
+              source={ALL_IN_ONE_REVEAL_CARD}
+              style={styles.revealCardImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.rewardCheck}>
+            <MaterialCommunityIcons name="check" size={28} color="#fff" />
+          </View>
+          <Text style={styles.rewardModalEyebrow}>NICE ONE!</Text>
+          <Text style={styles.rewardModalTitle}>You won</Text>
+          <Text style={styles.rewardModalAmount}>{formatCurrency(claimedCard?.rewardAmount || 0)}</Text>
+          <View style={styles.rewardWalletNote}>
+            <MaterialCommunityIcons name="wallet-plus-outline" size={19} color="#087f5b" />
+            <Text style={styles.rewardWalletText}>Added to your wallet</Text>
+          </View>
+          <Pressable style={styles.rewardDoneButton} onPress={() => setClaimedCard(null)} accessibilityRole="button">
+            <Text style={styles.rewardDoneText}>Continue</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#090b15' },
-  container: { padding: 22, paddingBottom: 48 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  backButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111827' },
-  heading: { color: '#fff', fontSize: 28, fontWeight: '800' },
-  headerSpacer: { width: 42 },
-  subtitle: { color: '#94a3b8', fontSize: 14, lineHeight: 21, marginBottom: 18 },
-  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { color: '#f8fafc', fontSize: 19, fontWeight: '800' },
-  pendingCount: { color: '#fbbf24', fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: '#111827', borderRadius: 20, borderWidth: 1, borderColor: '#263449', padding: 15, marginBottom: 14, overflow: 'hidden' },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  cardIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#29230f', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  container: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 40, backgroundColor: '#090b15' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginTop: 12, marginBottom: 22 },
+  backButton: { width: 46, height: 46, marginTop: 8, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111827', borderWidth: 1, borderColor: '#263449' },
+  headerText: { flex: 1, marginLeft: 14 },
+  heading: { color: '#f8fafc', fontSize: 26, fontWeight: '800', letterSpacing: -0.4 },
+  subtitle: { color: '#94a3b8', fontSize: 13, lineHeight: 18, marginTop: 3 },
+  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  sectionTitle: { color: '#f8fafc', fontSize: 18, fontWeight: '800' },
+  sectionSubtitle: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  pendingCountBadge: { backgroundColor: 'rgba(52,211,153,0.10)', borderWidth: 1, borderColor: 'rgba(52,211,153,0.22)', borderRadius: 14, paddingHorizontal: 11, paddingVertical: 7 },
+  pendingCount: { color: '#6ee7b7', fontSize: 12, fontWeight: '700' },
+  card: { width: '50%', alignSelf: 'auto', backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 4, paddingBottom: 8, overflow: 'visible', elevation: 0 },
+  activeCard: { width: '82%', maxWidth: 360, alignSelf: 'center' },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 13 },
+  cardIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#fff6db', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   cardDetails: { flex: 1 },
-  cardTitle: { color: '#f8fafc', fontSize: 14, fontWeight: '700' },
-  cardMeta: { color: '#94a3b8', fontSize: 11, marginTop: 4 },
-  prizePreview: { height: 70, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f2c29', borderRadius: 14, marginBottom: 9 },
-  previewLabel: { color: '#6ee7b7', fontSize: 10, fontWeight: '800', letterSpacing: 1.6 },
-  previewAmount: { color: '#fff', fontSize: 23, fontWeight: '900', marginTop: 2 },
-  scratchArea: { height: 104, borderRadius: 12, overflow: 'hidden', backgroundColor: '#94a3b8' },
-  scratchCover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 12 },
-  scratchSvg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  scratchPrompt: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  scratchPromptText: { color: '#0f172a', fontSize: 12, fontWeight: '800', marginTop: 3 },
-  revealedReward: { minHeight: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#0f2c29', borderRadius: 14 },
-  rewardCaption: { color: '#a7f3d0', fontSize: 12, fontWeight: '700' },
-  rewardAmount: { color: '#fff', fontSize: 26, fontWeight: '900', marginTop: 2 },
+  cardTitle: { color: '#172033', fontSize: 14, fontWeight: '700' },
+  cardMeta: { color: '#718096', fontSize: 11, marginTop: 4 },
+  scratchArea: { width: '100%', aspectRatio: 1, borderRadius: 0, overflow: 'hidden', backgroundColor: 'transparent', borderWidth: 0, borderColor: 'transparent' },
+  activeScratchArea: { aspectRatio: 1, borderRadius: 0 },
+  scratchReveal: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', borderRadius: 0 },
+  scratchSvg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 0 },
+  scratchPrompt: { position: 'absolute', bottom: 18, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 15, paddingVertical: 9, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.92)', elevation: 3 },
+  scratchPromptText: { color: '#0f172a', fontSize: 13, fontWeight: '800' },
+  scratchFooter: { marginTop: 11 },
+  scratchProgressText: { color: '#718096', fontSize: 12, fontWeight: '600', marginBottom: 7 },
+  scratchProgressCount: { color: '#946c00', fontWeight: '800' },
+  scratchTierInfo: { alignItems: 'center', paddingHorizontal: 2, paddingTop: 7, paddingBottom: 4 },
+  scratchTierInvestment: { color: '#94a3b8', fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  scratchTierReward: { color: '#6ee7b7', fontSize: 11, fontWeight: '800', textAlign: 'center', marginTop: 2 },
+  progressTrack: { height: 4, borderRadius: 2, backgroundColor: '#e8edf4', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2, backgroundColor: '#e5aa00' },
   statusText: { color: '#94a3b8', textAlign: 'center', paddingVertical: 20 },
-  emptyCard: { alignItems: 'center', padding: 28, borderRadius: 18, backgroundColor: '#111827', borderWidth: 1, borderColor: '#243247' },
-  emptyTitle: { color: '#f8fafc', fontWeight: '800', fontSize: 16, marginTop: 12 },
-  emptyText: { color: '#94a3b8', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 6 },
-  creditedBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, position: 'absolute', bottom: 8, left: 8, right: 8, paddingVertical: 6, borderRadius: 12, backgroundColor: '#111827', borderWidth: 1, borderColor: '#263449' },
-  revealImage: { width: '100%', height: 104, borderRadius: 12, marginBottom: 8 },
+  emptyCard: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 30, borderRadius: 20, backgroundColor: '#111827', borderWidth: 1, borderColor: '#1f2937' },
+  emptyIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 14, backgroundColor: 'rgba(52,211,153,0.10)' },
+  emptyTitle: { color: '#f8fafc', fontWeight: '800', fontSize: 17 },
+  emptyText: { maxWidth: 280, color: '#94a3b8', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 7 },
+  rewardModalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(15,23,42,0.62)' },
+  rewardModal: { width: '100%', maxWidth: 380, alignItems: 'center', paddingTop: 0, paddingHorizontal: 0, paddingBottom: 24, borderRadius: 28, backgroundColor: '#fff', overflow: 'hidden', borderWidth: 0 },
+  revealCardWrap: { width: '100%', height: 250, overflow: 'hidden', marginBottom: 0, backgroundColor: '#fff' },
+  revealCardImage: { width: '100%', height: '100%', backgroundColor: '#fff' },
+  rewardCheck: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: '#07966a', marginTop: 8, marginBottom: 16 },
+  rewardModalEyebrow: { color: '#07845f', fontSize: 11, fontWeight: '900', letterSpacing: 1.8, paddingHorizontal: 26 },
+  rewardModalTitle: { color: '#182230', fontSize: 19, fontWeight: '600', marginTop: 8, paddingHorizontal: 26 },
+  rewardModalAmount: { color: '#111827', fontSize: 42, fontWeight: '900', letterSpacing: -1.2, marginTop: 4, paddingHorizontal: 26 },
+  rewardWalletNote: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, marginTop: 17, borderRadius: 22, backgroundColor: '#e8f7f1' },
+  rewardWalletText: { color: '#087f5b', fontSize: 13, fontWeight: '700' },
+  rewardDoneButton: { width: '86%', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, marginTop: 24, borderRadius: 15, backgroundColor: '#162033' },
+  rewardDoneText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  allInOneModalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(15,23,42,0.62)' },
+  allInOneModal: { width: '100%', maxWidth: 380, alignItems: 'center', paddingHorizontal: 26, paddingTop: 30, paddingBottom: 24, borderRadius: 28, backgroundColor: '#fff' },
+  allInOneImage: { width: '100%', height: 200, marginBottom: 20 },
+  allInOneTitle: { color: '#182230', fontSize: 19, fontWeight: '600', marginTop: 8 },
+  allInOneAmount: { color: '#111827', fontSize: 42, fontWeight: '900', letterSpacing: -1.2, marginTop: 4 },
+  allInOneDoneButton: { width: '100%', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, marginTop: 24, borderRadius: 15, backgroundColor: '#162033' },
+  allInOneDoneText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  activeScratchBackdrop: { flex: 1, justifyContent: 'center', padding: 18, backgroundColor: 'rgba(9,11,21,0.88)' },
+  activeScratchModal: { maxWidth: 360, width: '82%', alignSelf: 'center', position: 'relative', borderRadius: 0, overflow: 'hidden', backgroundColor: '#090b15' },
+  activeScratchClose: { position: 'absolute', zIndex: 20, top: 12, right: 12, width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.94)', elevation: 5 },
+  totalRewardsCard: { flexDirection: 'row', alignItems: 'center', width: '100%', padding: 16, marginBottom: 24, borderRadius: 20, backgroundColor: '#111827', borderWidth: 1, borderColor: '#263449' },
+  totalRewardsIcon: { width: 50, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(52,211,153,0.12)', marginRight: 14 },
+  totalRewardsTextWrap: { flex: 1 },
+  totalRewardsLabel: { color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  totalRewardsAmount: { color: '#f8fafc', fontSize: 25, fontWeight: '900', marginTop: 4 },
+  cardsGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'flex-start', marginTop: 4 },
 });

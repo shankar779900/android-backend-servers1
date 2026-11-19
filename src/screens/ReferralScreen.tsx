@@ -105,15 +105,31 @@ export default function ReferralScreen() {
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>If their first investment is ₹5,000–₹20,000, the total reward is ₹500; above ₹20,000, it is ₹1,000.</Text>
+            <Text style={styles.ruleText}>The total referral scratch-card reward depends on your friend's first successful investment:</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>A first investment below ₹5,000 earns ₹100. Later investments do not earn additional referral rewards.</Text>
+            <Text style={styles.ruleText}>Under ₹5,000: ₹100–₹150</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>Referral rewards are credited after the investment is successfully completed.</Text>
+            <Text style={styles.ruleText}>₹5,000–₹20,000: ₹200–₹300</Text>
+          </View>
+          <View style={styles.ruleRow}>
+            <Text style={styles.ruleBullet}>•</Text>
+            <Text style={styles.ruleText}>₹20,001–₹50,000: ₹350–₹500</Text>
+          </View>
+          <View style={styles.ruleRow}>
+            <Text style={styles.ruleBullet}>•</Text>
+            <Text style={styles.ruleText}>₹50,001–₹1,00,000: ₹600–₹800</Text>
+          </View>
+          <View style={styles.ruleRow}>
+            <Text style={styles.ruleBullet}>•</Text>
+            <Text style={styles.ruleText}>Over ₹1,00,000: ₹850–₹1,000</Text>
+          </View>
+          <View style={styles.ruleRow}>
+            <Text style={styles.ruleBullet}>•</Text>
+            <Text style={styles.ruleText}>The scratch card appears after that investment; scratch it to add the reward to your wallet. Later investments do not earn another referral reward.</Text>
           </View>
         </SectionCard>
         <View style={styles.bottomButtonRow}>
