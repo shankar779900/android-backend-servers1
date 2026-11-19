@@ -26,28 +26,18 @@ const ALL_IN_ONE_REVEAL_CARD = require('../../assets/assets/assets/assets/all-in
 const SCRATCH_ASSETS = {
   below5000: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-below-5000.jpg'),
-    minReward: 1,
-    maxReward: 50,
   },
   below20000: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-below-20000.jpg'),
-    minReward: 51,
-    maxReward: 100,
   },
   below50000: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-below-50000.jpg'),
-    minReward: 101,
-    maxReward: 200,
   },
   below100000: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-below-100000.jpg'),
-    minReward: 201,
-    maxReward: 350,
   },
   above100000: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-above-100000.jpg'),
-    minReward: 351,
-    maxReward: 500,
   },
   referral: {
     cover: require('../../assets/assets/assets/assets/scratch-cover-refer.jpg'),
@@ -67,11 +57,6 @@ function getScratchTier(card: ScratchCard) {
   if (amount < 50000) return SCRATCH_ASSETS.below50000;
   if (amount <= 100000) return SCRATCH_ASSETS.below100000;
   return SCRATCH_ASSETS.above100000;
-}
-
-function getScratchAssets(card: ScratchCard) {
-  if (isReferralScratchCard(card)) return SCRATCH_ASSETS.referral;
-  return getScratchTier(card) || SCRATCH_ASSETS.below5000;
 }
 
 function ScratchCardTile({ card, onScratch, isActive = false, onOpen }: { card: ScratchCard; onScratch: (id: string) => Promise<boolean>; isActive?: boolean; onOpen?: (card: ScratchCard) => void }) {
@@ -139,8 +124,11 @@ function ScratchCardTile({ card, onScratch, isActive = false, onOpen }: { card: 
 
   const scratchProgress = Math.min(scratchDistance / (Math.min(scratchSize.width, scratchSize.height) * 0.75), 1);
 
+  const isReferral = isReferralScratchCard(card);
   const tier = getScratchTier(card);
-  const { cover } = getScratchAssets(card);
+  const cover = isReferral
+    ? SCRATCH_ASSETS.referral.cover
+    : tier?.cover || SCRATCH_ASSETS.below5000.cover;
 
   return (
     <Pressable
@@ -204,13 +192,8 @@ function ScratchCardTile({ card, onScratch, isActive = false, onOpen }: { card: 
       </View>
       <View style={styles.scratchTierInfo}>
         {tier ? (
-          <>
-            <Text style={styles.scratchTierInvestment}>Investment: {formatCurrency(card.investmentAmount)}</Text>
-            <Text style={styles.scratchTierReward}>
-              Possible reward: {formatCurrency(tier.minReward)}–{formatCurrency(tier.maxReward)}
-            </Text>
-          </>
-        ) : isReferralScratchCard(card) ? (
+          <Text style={styles.scratchTierInvestment}>Investment: {formatCurrency(card.investmentAmount)}</Text>
+        ) : isReferral ? (
           <Text style={styles.scratchTierReward}>Referral bonus</Text>
         ) : null}
       </View>
