@@ -109,27 +109,31 @@ export default function ReferralScreen() {
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>Under ₹5,000: ₹100–₹150</Text>
+            <Text style={styles.ruleText}>Under ₹5,000: ₹100</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>₹5,000–₹20,000: ₹200–₹300</Text>
+            <Text style={styles.ruleText}>₹5,000–₹20,000: ₹300</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>₹20,001–₹50,000: ₹350–₹500</Text>
+            <Text style={styles.ruleText}>₹20,001–₹50,000: ₹500</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>₹50,001–₹1,00,000: ₹600–₹800</Text>
+            <Text style={styles.ruleText}>₹50,001–₹1,00,000: ₹800</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
-            <Text style={styles.ruleText}>Over ₹1,00,000: ₹850–₹1,000</Text>
+            <Text style={styles.ruleText}>Over ₹1,00,000: ₹1,000</Text>
           </View>
           <View style={styles.ruleRow}>
             <Text style={styles.ruleBullet}>•</Text>
             <Text style={styles.ruleText}>The scratch card appears after that investment; scratch it to add the reward to your wallet. Later investments do not earn another referral reward.</Text>
+          </View>
+          <View style={styles.ruleRow}>
+            <Text style={styles.ruleBullet}>•</Text>
+            <Text style={styles.ruleText}>Any ₹100 referral signup bonus already paid counts toward the tier total.</Text>
           </View>
         </SectionCard>
         <View style={styles.bottomButtonRow}>
