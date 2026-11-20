@@ -23,6 +23,7 @@ const {
 const { validateOtpSendRequest, shouldAllowExistingUserOtp } = require('./utils/otpFlow');
 const { bankAddOtpPurpose, generateOtp } = require('./utils/otpCodes');
 const { getAllowedPlanAmounts } = require('./utils/investmentPlanAvailability');
+const { getInvestmentWorkingDays, getInvestmentCalendarDays } = require('./utils/investmentDuration');
 const {
   normalizeReferralCode,
   generateReferralCodeForUser,
@@ -660,29 +661,6 @@ async function verifyOTP(email, otp, purpose = 'signup') {
   return true;
 }
 
-function parseDurationDays(label) {
-  if (!label) return 30;
-  const normalized = String(label).trim().toLowerCase();
-  if (normalized.includes('month')) return 22;
-  const match = normalized.match(/(\d+)\s*days?/i);
-  if (match) return Number(match[1]);
-  const weekMatch = normalized.match(/(\d+)\s*weeks?/i);
-  if (weekMatch) return Number(weekMatch[1]) * 5;
-  return 30;
-}
-
-function determineWorkingDays(durationLabel, planType) {
-  const normalized = String(durationLabel || '').trim().toLowerCase();
-  if (normalized.includes('month')) return 22;
-  const daysMatch = normalized.match(/(\d+)\s*days?/i);
-  if (daysMatch) return Number(daysMatch[1]);
-  const weeksMatch = normalized.match(/(\d+)\s*weeks?/i);
-  if (weeksMatch) return Number(weeksMatch[1]) * 5;
-  if (planType === 'fno' || planType === 'futures' || planType === 'options') return 5;
-  if (planType === 'equity') return 22;
-  return 22;
-}
-
 function buildPortfolioPlan(transaction, todayGain = 0) {
   let details = {};
   try {
@@ -696,13 +674,13 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
   }
 
   const purchasedAt = transaction.createdAt instanceof Date ? transaction.createdAt : new Date(transaction.createdAt);
-  const durationDays = Math.max(parseDurationDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
+  const durationDays = Math.max(getInvestmentCalendarDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
   const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
   const amount = Number(transaction.amount || 0);
   const expectedReturn = Number(transaction.expectedReturn || details.expectedReturn || 0);
   const derivedReturnPercent = Number(transaction.returnPercent ?? details.returnPercent ?? (amount && expectedReturn ? ((expectedReturn - amount) / amount) * 100 : 0));
   const totalProfit = Number(transaction.totalProfit ?? details.totalProfit ?? (expectedReturn ? Math.max(expectedReturn - amount, 0) : 0));
-  const workingDays = Number(transaction.workingDays || details.workingDays || determineWorkingDays(transaction.investmentDuration || details.durationLabel || '30 Days', details.planType || 'equity'));
+  const workingDays = Number(transaction.workingDays || details.workingDays || getInvestmentWorkingDays(transaction.investmentDuration || details.durationLabel || '30 Days', details.planType || 'equity'));
   const dailyProfit = Number(transaction.dailyProfit ?? details.dailyProfit ?? (workingDays ? totalProfit / workingDays : 0));
 
   return {
@@ -2362,10 +2340,10 @@ app.post('/api/portfolio/purchase', async (req, res) => {
       }
 
       const purchasedAt = new Date();
-      const durationDays = Math.max(parseDurationDays(durationLabel || '30 Days'), 1);
+      const durationDays = Math.max(getInvestmentCalendarDays(durationLabel || '30 Days'), 1);
       const expiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
-      const workingDays = determineWorkingDays(durationLabel || '30 Days', planType);
+      const workingDays = getInvestmentWorkingDays(durationLabel || '30 Days', planType);
       const totalProfit = Number(totalReturn && Number(totalReturn) > 0 ? Number(totalReturn) - numericAmount : numericAmount * ((Number(returnPercent || 0)) / 100));
       const dailyProfit = workingDays ? totalProfit / workingDays : 0;
 

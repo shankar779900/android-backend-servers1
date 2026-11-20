@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { prisma } = require('../prisma');
+const { getInvestmentWorkingDays } = require('../utils/investmentDuration');
 const {
   toIndiaMidnight,
   getTradingDates,
@@ -9,28 +10,6 @@ const {
   roundToTwo,
   getIndiaMinutes,
 } = require('./investmentEarnings');
-
-function determineWorkingDays(durationLabel, planType) {
-  const normalizedLabel = String(durationLabel || '').trim().toLowerCase();
-  if (normalizedLabel.includes('month')) {
-    return 22;
-  }
-  const daysMatch = normalizedLabel.match(/(\d+)\s*days?/i);
-  if (daysMatch) {
-    return Number(daysMatch[1]);
-  }
-  const weeksMatch = normalizedLabel.match(/(\d+)\s*weeks?/i);
-  if (weeksMatch) {
-    return Number(weeksMatch[1]) * 5;
-  }
-  if (planType === 'fno') {
-    return 5;
-  }
-  if (planType === 'equity') {
-    return 22;
-  }
-  return 22;
-}
 
 function buildPortfolioPlan(transaction) {
   let details = {};
@@ -105,7 +84,7 @@ async function purchaseInvestment({
   const investmentStartAt = getIndiaMinutes(purchaseTime) >= 15 * 60
     ? new Date(purchaseDay.getTime() + 24 * 60 * 60 * 1000)
     : purchaseDay;
-  const workingDays = determineWorkingDays(durationLabel, planType);
+  const workingDays = getInvestmentWorkingDays(durationLabel, planType);
   const totalProfit = calculateTotalProfit(investmentAmount, returnPct);
   const dailyProfit = calculateDailyProfit(totalProfit, workingDays);
   const expectedReturn = roundToTwo(investmentAmount + totalProfit);

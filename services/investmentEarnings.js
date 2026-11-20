@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const { prisma } = require('../prisma');
+const { getInvestmentCalendarDays } = require('../utils/investmentDuration');
 
 const REDIS_URL = process.env.REDIS_URL || process.env.REDIS || null;
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || null;
@@ -149,14 +150,6 @@ function getIndiaWeekEnd(date = new Date()) {
   return toIndiaMidnight(end);
 }
 
-function parseDurationDays(label) {
-  if (!label) return 22;
-  const normalized = label.toLowerCase();
-  if (normalized.includes('month')) return 22;
-  const match = label.match(/(\d+)\s*days?/i);
-  return match ? Number(match[1]) : 22;
-}
-
 function buildPortfolioPlan(transaction, todayGain = 0) {
   let details = {};
   try {
@@ -170,7 +163,7 @@ function buildPortfolioPlan(transaction, todayGain = 0) {
   }
 
   const purchasedAt = transaction.investmentStartAt ? new Date(transaction.investmentStartAt) : new Date(transaction.createdAt);
-  const durationDays = Math.max(parseDurationDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
+  const durationDays = Math.max(getInvestmentCalendarDays(transaction.investmentDuration || details.durationLabel || '30 Days'), 1);
   const calculatedExpiresAt = new Date(purchasedAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
   const storedExpiresAt = transaction.investmentEndAt || details.expiresAt;
   const parsedExpiresAt = storedExpiresAt ? new Date(storedExpiresAt) : null;

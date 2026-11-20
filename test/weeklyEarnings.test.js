@@ -200,3 +200,43 @@ test('purchaseInvestment stores return metadata needed for accurate daily credit
   assert.equal(capturedCreateData.investmentStatus, 'Active');
   assert.equal(capturedCreateData.creditedEarnings, 0);
 });
+
+test('purchaseInvestment spreads a 46% commodity return across 33 trading days', async () => {
+  const { purchaseInvestment } = require('../services/investmentPurchaseService');
+  const originalPrisma = require('../prisma').prisma;
+  let capturedCreateData = null;
+
+  originalPrisma.$transaction = async (fn) => fn({
+    user: {
+      update: async () => ({ id: 'u1', balance: 90000 }),
+      updateMany: async () => ({ count: 1 }),
+      findUnique: async () => ({ id: 'u1', balance: 90000 }),
+    },
+    transaction: {
+      findFirst: async () => null,
+      create: async ({ data }) => {
+        capturedCreateData = data;
+        return { id: 'new-commodity-inv' };
+      },
+    },
+  });
+  originalPrisma.holiday = { findMany: async () => [] };
+
+  await purchaseInvestment({
+    userId: 'u1',
+    planId: 'copper41000',
+    planName: 'Hindustan Copper Limited',
+    planType: 'commodities',
+    amount: 41000,
+    amountLabel: '₹41,000',
+    returnLabel: 'Up to 46%',
+    returnPercent: 46,
+    durationLabel: '1.5 Months',
+    premium: false,
+  });
+
+  assert.equal(capturedCreateData.totalProfit, 18860);
+  assert.equal(capturedCreateData.expectedReturn, 59860);
+  assert.equal(capturedCreateData.workingDays, 33);
+  assert.equal(capturedCreateData.dailyProfit, 571.52);
+});

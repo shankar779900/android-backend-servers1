@@ -20,5 +20,5 @@ test('F&O plans include the configured amounts below ₹5,000', () => {
 
 test('existing supported amounts remain available', () => {
   assert.ok(getAllowedPlanAmounts('equity').includes(5000));
-  assert.deepEqual(getAllowedPlanAmounts('commodities'), [10000, 15000, 25000]);
+  assert.deepEqual(getAllowedPlanAmounts('commodities'), [10000, 15000, 27000, 41000, 46000, 48000, 65000, 95000]);
 });
