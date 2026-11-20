@@ -11,7 +11,8 @@ import { getUserFriendlyError } from '../utils/networkErrors';
 function parseDays(label: string) {
   if (!label) return 22;
   const normalized = label.toLowerCase();
-  if (normalized.includes('month')) return 22;
+  const monthsMatch = normalized.match(/(\d+(?:\.\d+)?)\s*months?/);
+  if (monthsMatch) return Math.round(Number(monthsMatch[1]) * 30);
   const match = label.match(/(\d+)\s*days?/i);
   return match ? Number(match[1]) : 22;
 }

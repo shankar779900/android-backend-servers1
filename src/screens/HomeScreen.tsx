@@ -13,7 +13,8 @@ import { getUserFriendlyError } from '../utils/networkErrors';
 function parseDays(label: string) {
   if (!label) return 22;
   const normalized = label.toLowerCase();
-  if (normalized.includes('month')) return 22;
+  const monthsMatch = normalized.match(/(\d+(?:\.\d+)?)\s*months?/);
+  if (monthsMatch) return Math.round(Number(monthsMatch[1]) * 30);
   const match = label.match(/(\d+)\s*days?/i);
   return match ? Number(match[1]) : 22;
 }
@@ -239,7 +240,7 @@ export default function HomeScreen() {
               </View>
               <View style={styles.planTitleWrapper}>
                 <Text style={styles.planName}>{plan.planName}</Text>
-                <Text style={styles.planMeta}>{plan.amountLabel}</Text>
+                <Text style={styles.planPrincipalAmount}>{plan.amountLabel}</Text>
               </View>
               <View style={styles.planStatusBadge}>
                 <Text style={styles.planStatusText}>ACTIVE</Text>
@@ -253,7 +254,13 @@ export default function HomeScreen() {
 
             <View style={styles.planDetailsRow}>
               <View style={styles.planDetailBadge}>
-                <Text style={styles.planDetailBadgeText}>{plan.planType === 'fno' ? `${plan.durationLabel} (5 trading days)` : plan.durationLabel}</Text>
+                <Text style={styles.planDetailBadgeText}>
+                  {plan.planType === 'fno'
+                    ? `${plan.durationLabel} (5 trading days)`
+                    : plan.planType === 'commodities' && plan.workingDays
+                      ? `${plan.durationLabel} (${plan.workingDays} trading days)`
+                      : plan.durationLabel}
+                </Text>
               </View>
             </View>
 
@@ -357,11 +364,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 2,
-  },
-  planMeta: {
-    color: '#ADB5BD',
-    fontSize: 10,
-    marginBottom: 0,
   },
   infoTitle: {
     color: '#FFFFFF',
@@ -480,8 +482,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     textTransform: 'uppercase',
   },
-  planReturnAmount: {
+  planPrincipalAmount: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  planReturnAmount: {
+    color: '#2A9D8F',
     fontSize: 14,
     fontWeight: '800',
   },
