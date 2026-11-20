@@ -27,11 +27,11 @@ function getReferralRewardRange(amount) {
   const numericAmount = Number(amount || 0);
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) return null;
 
-  if (numericAmount < 5000) return { min: 100, max: 150 };
-  if (numericAmount <= 20000) return { min: 200, max: 300 };
-  if (numericAmount <= 50000) return { min: 350, max: 500 };
-  if (numericAmount <= 100000) return { min: 600, max: 800 };
-  return { min: 850, max: 1000 };
+  if (numericAmount < 5000) return { min: 100, max: 100 };
+  if (numericAmount <= 20000) return { min: 300, max: 300 };
+  if (numericAmount <= 50000) return { min: 500, max: 500 };
+  if (numericAmount <= 100000) return { min: 800, max: 800 };
+  return { min: 1000, max: 1000 };
 }
 
 function generateReferralBonus(amount, signupBonusAlreadyPaid = false) {
